@@ -114,10 +114,20 @@ async function fetchCharacterData(page, playerLink, playerName) {
   try {
     await page.goto(playerLink, {
       waitUntil: "domcontentloaded",
-      timeout: 10000
+      timeout: 15000 // Increased timeout
     });
 
-    await page.waitForSelector("div.TableContentContainer", { timeout: 5000 });
+    // Try to wait for content, but continue if it fails
+    try {
+      await page.waitForSelector("div.TableContentContainer", { timeout: 8000 });
+    } catch (selectorError) {
+      console.warn(`⚠️  ${playerName}: Slow page load, continuing anyway...`);
+      // Check if page loaded at all
+      const hasAnyContent = await page.evaluate(() => document.body && document.body.textContent.length > 0);
+      if (!hasAnyContent) {
+        throw new Error("Page didn't load any content");
+      }
+    }
 
     const characterData = await page.evaluate(() => {
       const table = document.querySelector("div.TableContentContainer table.TableContent");
