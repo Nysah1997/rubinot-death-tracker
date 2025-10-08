@@ -208,10 +208,10 @@ function App() {
     // Initial fetch
     fetchDeaths();
     
-    // Set up auto-refresh every 1 second for maximum responsiveness
+    // Set up auto-refresh every 3 seconds (balanced: fast updates + server protection)
     const interval = setInterval(() => {
       fetchDeaths();
-    }, 1000);
+    }, 3000);
 
     return () => {
       console.log('Cleaning up interval for world:', world);
