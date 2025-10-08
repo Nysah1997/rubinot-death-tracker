@@ -89,6 +89,7 @@ function App() {
   const [newDeaths, setNewDeaths] = useState(new Set());
   const [copiedPlayer, setCopiedPlayer] = useState(null);
   const [isLoadingServer, setIsLoadingServer] = useState(false);
+  const [isApplyingFilters, setIsApplyingFilters] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const latestIds = useRef(new Set());
   const fetchingRef = useRef(false);
@@ -238,10 +239,19 @@ function App() {
   }, [appliedMinLevel, appliedVipOnly]); // Fetch when filters are applied
   
   // Handle Apply Filter button
-  const handleApplyFilters = () => {
+  const handleApplyFilters = async () => {
+    // Show immediate feedback
+    setIsApplyingFilters(true);
+    
+    // Apply filters
     setAppliedWorld(worldInput);
     setAppliedMinLevel(minLevelInput);
     setAppliedVipOnly(vipOnlyInput);
+    
+    // Hide feedback after a short delay (gives time for data to load)
+    setTimeout(() => {
+      setIsApplyingFilters(false);
+    }, 1500);
   };
   
   // Check if filters have changed (show visual indicator)
@@ -316,12 +326,13 @@ function App() {
             <i className="fa fa-filter"></i> Actions
           </label>
           <button 
-            className={`apply-filter-btn ${filtersChanged ? 'changed' : ''}`}
+            className={`apply-filter-btn ${filtersChanged ? 'changed' : ''} ${isApplyingFilters ? 'applying' : ''}`}
             onClick={handleApplyFilters}
-            title={filtersChanged ? 'Click to apply filters' : 'No changes to apply'}
+            disabled={isApplyingFilters}
+            title={isApplyingFilters ? 'Applying filters...' : (filtersChanged ? 'Click to apply filters' : 'No changes to apply')}
           >
-            <i className={`fa ${filtersChanged ? 'fa-exclamation-circle' : 'fa-check'}`}></i>
-            {filtersChanged ? ' Apply Filters' : ' Filters Applied'}
+            <i className={`fa ${isApplyingFilters ? 'fa-spinner fa-spin' : (filtersChanged ? 'fa-exclamation-circle' : 'fa-check')}`}></i>
+            {isApplyingFilters ? ' Applying...' : (filtersChanged ? ' Apply Filters' : ' Filters Applied')}
           </button>
         </div>
       </div>
