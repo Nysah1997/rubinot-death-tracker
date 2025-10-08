@@ -164,23 +164,34 @@ function App() {
           data.forEach(d => {
             const id = d.player + d.time;
             
-          // Check if this is a new death
-          if (!latestIds.current.has(id)) {
-            latestIds.current.add(id);
+            // CLIENT-SIDE FILTER SAFETY NET: Double-check filters
+            // This prevents stale cache data from showing wrong results
+            const levelMatch = d.level >= currentMinLevel.current;
+            const vipMatch = !currentVipOnly.current || (d.accountStatus && d.accountStatus.toLowerCase().includes("vip"));
             
-            // Only mark as new if we already have deaths (not first load)
-            if (prevDeaths.length > 0) {
-              newDeathIds.add(id);
+            // Only process deaths that match current filters
+            if (!levelMatch || !vipMatch) {
+              console.log(`Filtered out death: ${d.player} (Level: ${d.level}, VIP: ${d.accountStatus}) - Filters: Level ${currentMinLevel.current}+, VIP: ${currentVipOnly.current}`);
+              return; // Skip this death
             }
             
-            // Memory optimization: limit latestIds to 50 most recent
-            if (latestIds.current.size > 50) {
-              const idsArray = Array.from(latestIds.current);
-              latestIds.current = new Set(idsArray.slice(-50));
+            // Check if this is a new death
+            if (!latestIds.current.has(id)) {
+              latestIds.current.add(id);
+              
+              // Only mark as new if we already have deaths (not first load)
+              if (prevDeaths.length > 0) {
+                newDeathIds.add(id);
+              }
+              
+              // Memory optimization: limit latestIds to 50 most recent
+              if (latestIds.current.size > 50) {
+                const idsArray = Array.from(latestIds.current);
+                latestIds.current = new Set(idsArray.slice(-50));
+              }
             }
-          }
-          
-          updatedDeaths.push(d);
+            
+            updatedDeaths.push(d);
           });
 
           // Keep only the latest 3 deaths for maximum speed
