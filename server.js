@@ -332,10 +332,10 @@ app.use('/api', rateLimitMiddleware);
 // ULTRA-FAST: Get deaths WITHOUT character data (instant response!)
 app.get('/api/deaths-fast', async (req, res) => {
   const worldId = req.query.world || "20";
-  const minLevel = req.query.minLevel || req.query.min_level || "1";
+  const minLevel = req.query.minLevel || req.query.min_level || "";
   
   // Build cache key (only level filter, VIP is client-side)
-  const fastCacheKey = `${worldId}_${minLevel}`;
+  const fastCacheKey = `${worldId}_${minLevel || 'all'}`;
   
   // Check fast cache
   if (fastDeathsCache && fastDeathsCache.key === fastCacheKey && Date.now() - fastDeathsTimestamp < FAST_DEATHS_CACHE) {
@@ -367,8 +367,9 @@ app.get('/api/deaths-fast', async (req, res) => {
     
     // Build URL with Rubinot's level filter only
     let url = `https://rubinot.com.br/?subtopic=latestdeaths&world=${worldId}`;
-    if (minLevel && parseInt(minLevel) > 1) {
-      url += `&min_level=${minLevel}`;
+    const levelInt = parseInt(minLevel);
+    if (minLevel && !isNaN(levelInt) && levelInt > 1) {
+      url += `&min_level=${levelInt}`;
     }
     // NOTE: No VIP filter - Rubinot doesn't support it
     
@@ -428,7 +429,8 @@ app.get('/api/deaths-fast', async (req, res) => {
     fastDeathsCache = { key: fastCacheKey, deaths };
     fastDeathsTimestamp = Date.now();
     
-    console.log(`⚡⚡ FAST fetch: ${deaths.length} deaths (level ${minLevel}+) in <1s`);
+    const levelText = minLevel ? `level ${minLevel}+` : 'all levels';
+    console.log(`⚡⚡ FAST fetch: ${deaths.length} deaths (${levelText}) in <1s`);
     return res.json(deaths);
     
   } catch (error) {
@@ -523,25 +525,27 @@ app.get('/api/latest-death', async (req, res) => {
 // API endpoint - ULTRA FAST!
 app.get('/api/deaths', async (req, res) => {
   const worldId = req.query.world || "20";
-  const minLevel = req.query.minLevel || req.query.min_level || "1";
+  const minLevel = req.query.minLevel || req.query.min_level || "";
   const vipFilter = req.query.vip === "true"; // Client-side filter only
   
   // Build URL with Rubinot's built-in filters!
   let url = `https://rubinot.com.br/?subtopic=latestdeaths&world=${worldId}`;
   
   // Add level filter (uses Rubinot's native filter!)
-  if (minLevel && parseInt(minLevel) > 1) {
-    url += `&min_level=${minLevel}`;
-    console.log(`🎯 Using Rubinot's level filter: ${minLevel}+`);
+  const levelInt = parseInt(minLevel);
+  if (minLevel && !isNaN(levelInt) && levelInt > 1) {
+    url += `&min_level=${levelInt}`;
+    console.log(`🎯 Using Rubinot's level filter: ${levelInt}+`);
   }
   
   // NOTE: VIP filter is client-side only (Rubinot doesn't have this filter)
 
   // Check cache (only level affects Rubinot response, not VIP)
-  const cacheKey = `deaths_${worldId}_${minLevel}_v4`;
+  const cacheKey = `deaths_${worldId}_${minLevel || 'all'}_v4`;
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    console.log(`✅ Cache hit for world ${worldId}, level ${minLevel}+ (no Rubinot request)`);
+    const levelText = minLevel ? `level ${minLevel}+` : 'all levels';
+    console.log(`✅ Cache hit for world ${worldId}, ${levelText} (no Rubinot request)`);
     
     // Apply client-side VIP filter if requested
     if (vipFilter) {
