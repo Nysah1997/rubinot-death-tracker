@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 3000;
 const cache = new Map();
 const characterCache = new Map();
 const CACHE_DURATION = 2000; // 2 seconds for deaths (even faster updates!)
-const CHARACTER_CACHE_DURATION = 14400000; // 4 hours (longer persistence!)
+const CHARACTER_CACHE_DURATION = 86400000; // 24 hours (character data rarely changes!)
 
 // Store the very latest death separately for instant access
 let latestDeathCache = null;
@@ -526,30 +526,63 @@ app.get('/api/deaths', async (req, res) => {
       return res.json(emptyResult);
     }
 
-    // Fetch character data for latest 3 deaths only (faster!)
-    const latestDeaths = deaths.slice(0, 3);
+    // SMART CACHING: Check which deaths already have cached character data
+    const deathsWithCacheStatus = deaths.map(death => {
+      const charCacheKey = `char_${death.player.toLowerCase()}`;
+      const cachedChar = characterCache.get(charCacheKey);
+      const isCached = cachedChar && Date.now() - cachedChar.timestamp < CHARACTER_CACHE_DURATION;
+      
+      if (isCached) {
+        return {
+          ...death,
+          ...cachedChar.data,
+          _cached: true
+        };
+      }
+      
+      return {
+        ...death,
+        _cached: false,
+        _needsFetch: true
+      };
+    });
     
-    // Return basic deaths for items 4-10 without character data
-    const quickDeaths = deaths.slice(3).map(death => ({
+    // Separate cached from uncached
+    const cachedDeaths = deathsWithCacheStatus.filter(d => d._cached);
+    const uncachedDeaths = deathsWithCacheStatus.filter(d => !d._cached);
+    
+    console.log(`💾 ${cachedDeaths.length} cached, ⚡ ${uncachedDeaths.length} need fetching`);
+    
+    // Fetch ONLY the first 3 uncached deaths (not all!)
+    const deathsToFetch = uncachedDeaths.slice(0, 3);
+    const quickDeaths = uncachedDeaths.slice(3).map(death => ({
       ...death,
-      vocation: "Not fetched",
-      residence: "Not fetched",
+      vocation: "Unknown",
+      residence: "Unknown",
       accountStatus: "Free Account",
       guild: "No Guild"
     }));
     
-    // PRIORITY FETCHING - fetch latest death FIRST, then others in parallel!
-    const [firstDeath, ...otherDeaths] = latestDeaths;
+    // If we have no uncached deaths to fetch, return immediately!
+    if (deathsToFetch.length === 0) {
+      console.log(`⚡⚡ ALL CACHED! Instant response!`);
+      const allDeaths = [...cachedDeaths].sort((a, b) => {
+        // Maintain original order
+        return deaths.findIndex(d => d.player === a.player) - deaths.findIndex(d => d.player === b.player);
+      });
+      
+      await page.close();
+      
+      cache.set(cacheKey, {
+        data: allDeaths,
+        timestamp: Date.now()
+      });
+      
+      return res.json(allDeaths);
+    }
     
-    // Fetch the very latest death immediately (priority!)
-    const firstDeathData = await fetchSingleCharacter(browser, firstDeath);
-    
-    // Update latest death cache
-    latestDeathCache = firstDeathData;
-    latestDeathTimestamp = Date.now();
-    
-    // Now fetch the rest in parallel (non-blocking)
-    const characterPromises = otherDeaths.map(async (death) => {
+    // Fetch uncached character data
+    const characterPromises = deathsToFetch.map(async (death) => {
       const charCacheKey = `char_${death.player.toLowerCase()}`;
       const cachedChar = characterCache.get(charCacheKey);
       
@@ -611,10 +644,13 @@ app.get('/api/deaths', async (req, res) => {
     });
 
     // Wait for all character fetches to complete (parallel!)
-    const otherDeathsData = await Promise.all(characterPromises);
+    const newlyFetchedDeaths = await Promise.all(characterPromises);
     
-    // Combine: latest death first, then others with character data, then quick deaths
-    const deathsWithCharacterData = [firstDeathData, ...otherDeathsData, ...quickDeaths];
+    // Combine: cached deaths + newly fetched + quick deaths, maintaining original order
+    const allFetchedDeaths = [...cachedDeaths, ...newlyFetchedDeaths, ...quickDeaths];
+    const deathsWithCharacterData = allFetchedDeaths.sort((a, b) => {
+      return deaths.findIndex(d => d.player === a.player) - deaths.findIndex(d => d.player === b.player);
+    });
 
     console.log(`✅ Processed ${deathsWithCharacterData.length} deaths (priority fetch)`);
 
