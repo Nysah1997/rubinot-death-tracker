@@ -301,12 +301,14 @@ function App() {
           <label className="control-label">
             <i className="fa fa-diamond"></i> VIP Only
           </label>
-          <input
-            type="checkbox"
-            checked={vipOnlyInput}
-            onChange={e => setVipOnlyInput(e.target.checked)}
-            className="checkbox-input"
-          />
+          <div className="checkbox-wrapper">
+            <input
+              type="checkbox"
+              checked={vipOnlyInput}
+              onChange={e => setVipOnlyInput(e.target.checked)}
+              className="checkbox-input"
+            />
+          </div>
         </div>
         
         <div className="control-group">

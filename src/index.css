@@ -194,6 +194,15 @@ body::before {
   border-color: rgba(0, 212, 255, 0.3);
 }
 
+.checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 36px;
+  padding: 0.5rem 0.8rem;
+  min-width: 130px;
+}
+
 .checkbox-input {
   width: 18px !important;
   height: 18px !important;
@@ -201,7 +210,7 @@ body::before {
   accent-color: var(--primary-color);
   cursor: pointer;
   transition: all 0.2s ease;
-  margin-top: 0.2rem;
+  margin: 0;
 }
 
 .checkbox-input:hover {
