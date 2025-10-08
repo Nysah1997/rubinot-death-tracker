@@ -603,6 +603,9 @@ app.get('/api/deaths', async (req, res) => {
     }
 
     // Parse only first 10 deaths (not 300!)
+    // NOTE: Rubinot's filter ensures these 10 are the RIGHT ones (filtered by level/VIP)
+    // Without filter: first 10 of all deaths
+    // With filter: first 10 of filtered deaths (much more useful!)
     const deaths = await page.evaluate(() => {
       const rows = document.querySelectorAll("div.TableContentContainer table.TableContent tr");
       const arr = [];
