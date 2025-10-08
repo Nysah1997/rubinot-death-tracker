@@ -236,16 +236,18 @@ body::before {
   flex-direction: column;
   gap: 1.5rem;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 1.5rem 0;
   width: 100%;
+  max-width: 900px;
   margin: 0 auto;
   min-height: 200px;
+  box-sizing: border-box;
 }
 
 /* Ensure empty state is centered within deaths-grid */
 .deaths-grid > .empty-state {
-  margin: 0 auto;
+  align-self: center;
 }
 
 /* Individual Death Card */
@@ -525,9 +527,10 @@ body::before {
   -webkit-backdrop-filter: blur(5px);
   min-height: 200px;
   text-align: center;
-  width: 100%;
-  max-width: 700px;
+  width: 700px;
+  max-width: 90%;
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .empty-state h3 {
@@ -606,6 +609,12 @@ body::before {
     gap: 0.5rem;
     width: 100%;
     max-width: 700px;
+  }
+  
+  .empty-state {
+    width: 100%;
+    max-width: 95%;
+    padding: 1.5rem;
   }
 
   .death-content {
