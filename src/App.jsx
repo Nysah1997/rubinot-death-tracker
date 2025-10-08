@@ -312,6 +312,9 @@ function App() {
         </div>
         
         <div className="control-group">
+          <label className="control-label">
+            <i className="fa fa-filter"></i> Actions
+          </label>
           <button 
             className={`apply-filter-btn ${filtersChanged ? 'changed' : ''}`}
             onClick={handleApplyFilters}

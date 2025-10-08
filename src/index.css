@@ -151,7 +151,6 @@ body::before {
   align-items: flex-start;
   gap: 0.4rem;
   justify-content: flex-start;
-  min-height: 65px;
 }
 
 .control-label {
@@ -163,8 +162,10 @@ body::before {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  height: 20px;
+  height: 16px;
   line-height: 1;
+  margin: 0;
+  padding: 0;
 }
 
 .control-label i {
@@ -205,6 +206,7 @@ body::before {
   height: 36px;
   padding: 0.5rem 0.8rem;
   min-width: 130px;
+  box-sizing: border-box;
 }
 
 .checkbox-input {
@@ -234,7 +236,7 @@ body::before {
   transition: all 0.2s ease;
   box-shadow: 0 2px 8px rgba(0, 212, 255, 0.3);
   min-width: 130px;
-  margin-top: 1.2rem;
+  margin: 0;
   height: 36px;
   display: flex;
   align-items: center;
