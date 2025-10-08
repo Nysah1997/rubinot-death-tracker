@@ -11,10 +11,10 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Optimized caching - aggressive settings to protect Rubinot server
+// MAXIMUM SPEED caching - push to the limit!
 const cache = new Map();
 const characterCache = new Map();
-const CACHE_DURATION = 3000; // 3 seconds for deaths (matches 2s frontend polling!)
+const CACHE_DURATION = 5000; // 5 seconds (2.5x frontend polling = more cache hits!)
 const CHARACTER_CACHE_DURATION = 86400000; // 24 hours (character data rarely changes!)
 
 // Removed unused fast death caches (memory optimization)
@@ -23,69 +23,54 @@ const CHARACTER_CACHE_DURATION = 86400000; // 24 hours (character data rarely ch
 let sharedBrowser = null;
 let browserLaunching = false;
 
-// Rate limiting protection to avoid IP blocking
-const requestLog = new Map(); // Track requests per IP
+// ULTRA-SMART Rate limiting - ONLY protects RubinOT, not cache hits!
+const rubinOTRequestLog = new Map(); // Track ONLY actual RubinOT fetches per IP
 const RATE_LIMIT_WINDOW = 60000; // 1 minute window
-const MAX_REQUESTS_PER_MINUTE = 20; // Max 20 API calls per minute per IP
-const MIN_REQUEST_INTERVAL = 1000; // Minimum 1 second between requests from same IP
+const MAX_RUBINOT_FETCHES_PER_MINUTE = 10; // Max 10 actual RubinOT fetches per minute (safe limit)
+const MIN_RUBINOT_INTERVAL = 2000; // Minimum 2 seconds between RubinOT fetches
 
-// Rate limiting middleware (smart - excludes cache hits!)
+// NO rate limiting for cache hits - instant responses!
 function rateLimitMiddleware(req, res, next) {
-  const ip = req.ip || req.connection.remoteAddress || 'unknown';
-  const now = Date.now();
-  
-  // Check minimum interval first (always applies, even for cache)
-  if (!requestLog.has(ip)) {
-    requestLog.set(ip, { requests: [], lastRequest: 0 });
-  }
-  
-  const ipData = requestLog.get(ip);
-  const timeSinceLastRequest = now - ipData.lastRequest;
-  
-  // Minimum 500ms between ANY requests (spam protection)
-  if (ipData.lastRequest > 0 && timeSinceLastRequest < 500) {
-    console.warn(`⚠️  Request too fast from IP ${ip}: ${timeSinceLastRequest}ms`);
-    return res.status(429).json({ 
-      error: 'Requests too frequent. Please wait 500ms between requests.',
-      retryAfter: 1
-    });
-  }
-  
-  // Update last request time
-  ipData.lastRequest = now;
-  requestLog.set(ip, ipData);
-  
-  // Mark this request for potential rate limit tracking
-  // Will be logged ONLY if it results in actual Rubinot fetch (not cache hit)
-  req._rateLimitIP = ip;
-  req._rateLimitTime = now;
-  
+  // Just pass through - we'll check rate limits ONLY if cache misses
+  req._rateLimitIP = req.ip || req.connection.remoteAddress || 'unknown';
+  req._rateLimitTime = Date.now();
   next();
 }
 
-// Helper to log non-cached requests
-function logRateLimitRequest(ip) {
+// Helper to check AND enforce RubinOT rate limits (returns true if allowed)
+function checkRubinOTRateLimit(ip) {
   const now = Date.now();
   
-  if (!requestLog.has(ip)) {
-    requestLog.set(ip, { requests: [], lastRequest: now });
+  if (!rubinOTRequestLog.has(ip)) {
+    rubinOTRequestLog.set(ip, { requests: [], lastRequest: 0 });
   }
   
-  const ipData = requestLog.get(ip);
+  const ipData = rubinOTRequestLog.get(ip);
+  
+  // Check minimum interval between RubinOT fetches
+  const timeSinceLastFetch = now - ipData.lastRequest;
+  if (ipData.lastRequest > 0 && timeSinceLastFetch < MIN_RUBINOT_INTERVAL) {
+    console.warn(`🚫 RubinOT fetch too soon from IP ${ip}: ${timeSinceLastFetch}ms (need ${MIN_RUBINOT_INTERVAL}ms)`);
+    return false; // BLOCKED!
+  }
   
   // Remove old requests outside the time window
   const recentRequests = ipData.requests.filter(time => now - time < RATE_LIMIT_WINDOW);
   
-  // Add this request
-  recentRequests.push(now);
-  
-  ipData.requests = recentRequests;
-  requestLog.set(ip, ipData);
-  
-  // Check if rate limit would be exceeded
-  if (recentRequests.length > MAX_REQUESTS_PER_MINUTE) {
-    console.warn(`⚠️  High request rate from IP ${ip}: ${recentRequests.length} Rubinot fetches/minute`);
+  // Check if we'd exceed the limit
+  if (recentRequests.length >= MAX_RUBINOT_FETCHES_PER_MINUTE) {
+    console.warn(`🚫 RubinOT rate limit exceeded for IP ${ip}: ${recentRequests.length}/${MAX_RUBINOT_FETCHES_PER_MINUTE} fetches/minute`);
+    return false; // BLOCKED!
   }
+  
+  // ALLOWED! Log this fetch
+  recentRequests.push(now);
+  ipData.requests = recentRequests;
+  ipData.lastRequest = now;
+  rubinOTRequestLog.set(ip, ipData);
+  
+  console.log(`✅ RubinOT fetch allowed for IP ${ip}: ${recentRequests.length}/${MAX_RUBINOT_FETCHES_PER_MINUTE} fetches in last minute`);
+  return true;
 }
 
 // Cleanup - less frequent
@@ -104,14 +89,14 @@ setInterval(() => {
     entries.slice(0, 30).forEach(([key]) => characterCache.delete(key));
   }
   
-  // Cleanup old rate limit logs
-  for (const [ip, ipData] of requestLog.entries()) {
+  // Cleanup old RubinOT rate limit logs
+  for (const [ip, ipData] of rubinOTRequestLog.entries()) {
     const recentRequests = ipData.requests.filter(time => now - time < RATE_LIMIT_WINDOW);
     if (recentRequests.length === 0 && now - ipData.lastRequest > RATE_LIMIT_WINDOW) {
-      requestLog.delete(ip);
+      rubinOTRequestLog.delete(ip);
     } else {
       ipData.requests = recentRequests;
-      requestLog.set(ip, ipData);
+      rubinOTRequestLog.set(ip, ipData);
     }
   }
 }, 60000); // Every minute
@@ -312,9 +297,31 @@ app.get('/api/deaths', async (req, res) => {
     return res.json(cached.data);
   }
 
-  // Log non-cached request (actual Rubinot fetch)
-  if (req._rateLimitIP) {
-    logRateLimitRequest(req._rateLimitIP);
+  // Check rate limit BEFORE hitting RubinOT (this is where protection happens!)
+  if (req._rateLimitIP && !checkRubinOTRateLimit(req._rateLimitIP)) {
+    // Rate limit exceeded! Return stale cache if available
+    if (cached) {
+      const cacheAge = Math.round((Date.now() - cached.timestamp) / 1000);
+      console.log(`⚠️  Rate limit hit, returning stale cache (${cacheAge}s old)`);
+      res.set('X-Rate-Limited', 'true');
+      res.set('Retry-After', '2'); // Try again in 2 seconds
+      
+      // Apply client-side VIP filter if requested
+      if (vipFilter) {
+        const vipDeaths = cached.data.filter(death => 
+          death.accountStatus && death.accountStatus.toLowerCase().includes('vip')
+        );
+        return res.json(vipDeaths);
+      }
+      
+      return res.json(cached.data);
+    }
+    
+    // No stale cache available, return 429
+    return res.status(429).json({ 
+      error: 'Too many RubinOT requests. Please wait 2 seconds.',
+      retryAfter: 2
+    });
   }
 
   let page = null;
