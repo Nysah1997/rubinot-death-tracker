@@ -11,10 +11,10 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// MAXIMUM SPEED caching - push to the limit!
+// MAXIMUM SPEED caching - faster and still safe!
 const cache = new Map();
 const characterCache = new Map();
-const CACHE_DURATION = 5000; // 5 seconds (2.5x frontend polling = more cache hits!)
+const CACHE_DURATION = 3000; // 3 seconds (faster updates, still safe!)
 const CHARACTER_CACHE_DURATION = 86400000; // 24 hours (character data rarely changes!)
 
 // Removed unused fast death caches (memory optimization)
@@ -26,8 +26,8 @@ let browserLaunching = false;
 // ULTRA-SMART Rate limiting - ONLY protects RubinOT, not cache hits!
 const rubinOTRequestLog = new Map(); // Track ONLY actual RubinOT fetches per IP
 const RATE_LIMIT_WINDOW = 60000; // 1 minute window
-const MAX_RUBINOT_FETCHES_PER_MINUTE = 10; // Max 10 actual RubinOT fetches per minute (safe limit)
-const MIN_RUBINOT_INTERVAL = 2000; // Minimum 2 seconds between RubinOT fetches
+const MAX_RUBINOT_FETCHES_PER_MINUTE = 15; // Max 15 actual RubinOT fetches per minute (faster, still safe!)
+const MIN_RUBINOT_INTERVAL = 3000; // Minimum 3 seconds between RubinOT fetches
 
 // NO rate limiting for cache hits - instant responses!
 function rateLimitMiddleware(req, res, next) {
@@ -304,7 +304,7 @@ app.get('/api/deaths', async (req, res) => {
       const cacheAge = Math.round((Date.now() - cached.timestamp) / 1000);
       console.log(`⚠️  Rate limit hit, returning stale cache (${cacheAge}s old)`);
       res.set('X-Rate-Limited', 'true');
-      res.set('Retry-After', '2'); // Try again in 2 seconds
+      res.set('Retry-After', '3'); // Try again in 3 seconds
       
       // Apply client-side VIP filter if requested
       if (vipFilter) {
@@ -319,8 +319,8 @@ app.get('/api/deaths', async (req, res) => {
     
     // No stale cache available, return 429
     return res.status(429).json({ 
-      error: 'Too many RubinOT requests. Please wait 2 seconds.',
-      retryAfter: 2
+      error: 'Too many RubinOT requests. Please wait 3 seconds.',
+      retryAfter: 3
     });
   }
 
