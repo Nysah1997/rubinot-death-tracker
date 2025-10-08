@@ -92,6 +92,9 @@ async function getBrowser() {
 // Serve static files from dist
 app.use(express.static(path.join(__dirname, 'dist')));
 
+// Serve images from img folder
+app.use('/img', express.static(path.join(__dirname, 'img')));
+
 // CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -295,6 +298,7 @@ app.get('/api/deaths', async (req, res) => {
 
   } catch (err) {
     console.error("❌ Error:", err);
+    console.error("❌ Error stack:", err.stack);
     if (page) {
       try {
         await page.close();
@@ -302,7 +306,7 @@ app.get('/api/deaths', async (req, res) => {
         console.error("Error closing page:", e);
       }
     }
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message, stack: err.stack });
   }
 });
 
