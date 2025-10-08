@@ -184,8 +184,8 @@ function App() {
           updatedDeaths.push(d);
           });
 
-          // Keep only the latest 5 deaths for speed
-          return updatedDeaths.slice(0, 5);
+          // Keep only the latest 3 deaths for maximum speed
+          return updatedDeaths.slice(0, 3);
         });
 
         setNewDeaths(newDeathIds);
