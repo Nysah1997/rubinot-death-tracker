@@ -152,10 +152,13 @@ app.get('/api/deaths', async (req, res) => {
     const deaths = await page.evaluate(() => {
       const rows = document.querySelectorAll("div.TableContentContainer table.TableContent tr");
       const arr = [];
+      let count = 0;
+      const MAX_DEATHS = 10; // Only parse first 10 rows!
 
-      rows.forEach((row) => {
+      for (let i = 0; i < rows.length && count < MAX_DEATHS; i++) {
+        const row = rows[i];
         const tds = row.querySelectorAll("td");
-        if (tds.length < 3) return;
+        if (tds.length < 3) continue;
 
         const time = tds[1]?.innerText.trim();
         const playerLink = tds[2]?.querySelector("a")?.href || null;
@@ -163,19 +166,20 @@ app.get('/api/deaths', async (req, res) => {
 
         const text = tds[2]?.innerText.replace(/\s+/g, " ") || "";
         const levelMatch = text.match(/level\s*(\d+)/i);
-        if (!levelMatch || !player) return;
+        if (!levelMatch || !player) continue;
 
         const level = parseInt(levelMatch[1]);
         let cause = text.replace(/^.*?died at level \d+ by\s+/i, "");
         cause = cause.replace(/\.$/, "");
 
         arr.push({ player, playerLink, level, cause, time });
-      });
+        count++;
+      }
 
       return arr;
     });
 
-    console.log(`✅ Found ${deaths.length} deaths`);
+    console.log(`✅ Parsed ${deaths.length} deaths`);
 
     // Fetch character data for latest 5 deaths
     const latestDeaths = deaths.slice(0, 5);
