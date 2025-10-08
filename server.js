@@ -37,49 +37,63 @@ const RATE_LIMIT_WINDOW = 60000; // 1 minute window
 const MAX_REQUESTS_PER_MINUTE = 20; // Max 20 API calls per minute per IP
 const MIN_REQUEST_INTERVAL = 1000; // Minimum 1 second between requests from same IP
 
-// Rate limiting middleware
+// Rate limiting middleware (smart - excludes cache hits!)
 function rateLimitMiddleware(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress || 'unknown';
   const now = Date.now();
   
-  // Get or create request log for this IP
+  // Check minimum interval first (always applies, even for cache)
   if (!requestLog.has(ip)) {
-    requestLog.set(ip, []);
+    requestLog.set(ip, { requests: [], lastRequest: 0 });
   }
   
-  const requests = requestLog.get(ip);
+  const ipData = requestLog.get(ip);
+  const timeSinceLastRequest = now - ipData.lastRequest;
   
-  // Remove old requests outside the time window
-  const recentRequests = requests.filter(time => now - time < RATE_LIMIT_WINDOW);
-  
-  // Check rate limit
-  if (recentRequests.length >= MAX_REQUESTS_PER_MINUTE) {
-    console.warn(`⚠️  Rate limit exceeded for IP ${ip}: ${recentRequests.length} requests/minute`);
+  // Minimum 500ms between ANY requests (spam protection)
+  if (ipData.lastRequest > 0 && timeSinceLastRequest < 500) {
+    console.warn(`⚠️  Request too fast from IP ${ip}: ${timeSinceLastRequest}ms`);
     return res.status(429).json({ 
-      error: 'Rate limit exceeded. Please slow down.',
-      retryAfter: Math.ceil((recentRequests[0] + RATE_LIMIT_WINDOW - now) / 1000)
+      error: 'Requests too frequent. Please wait 500ms between requests.',
+      retryAfter: 1
     });
   }
   
-  // Check minimum interval (spam protection)
-  if (recentRequests.length > 0) {
-    const lastRequest = recentRequests[recentRequests.length - 1];
-    const timeSinceLastRequest = now - lastRequest;
-    
-    if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-      console.warn(`⚠️  Request too fast from IP ${ip}: ${timeSinceLastRequest}ms since last request`);
-      return res.status(429).json({ 
-        error: 'Requests too frequent. Please wait 1 second between requests.',
-        retryAfter: 1
-      });
-    }
-  }
+  // Update last request time
+  ipData.lastRequest = now;
+  requestLog.set(ip, ipData);
   
-  // Log this request
-  recentRequests.push(now);
-  requestLog.set(ip, recentRequests);
+  // Mark this request for potential rate limit tracking
+  // Will be logged ONLY if it results in actual Rubinot fetch (not cache hit)
+  req._rateLimitIP = ip;
+  req._rateLimitTime = now;
   
   next();
+}
+
+// Helper to log non-cached requests
+function logRateLimitRequest(ip) {
+  const now = Date.now();
+  
+  if (!requestLog.has(ip)) {
+    requestLog.set(ip, { requests: [], lastRequest: now });
+  }
+  
+  const ipData = requestLog.get(ip);
+  
+  // Remove old requests outside the time window
+  const recentRequests = ipData.requests.filter(time => now - time < RATE_LIMIT_WINDOW);
+  
+  // Add this request
+  recentRequests.push(now);
+  
+  ipData.requests = recentRequests;
+  requestLog.set(ip, ipData);
+  
+  // Check if rate limit would be exceeded
+  if (recentRequests.length > MAX_REQUESTS_PER_MINUTE) {
+    console.warn(`⚠️  High request rate from IP ${ip}: ${recentRequests.length} Rubinot fetches/minute`);
+  }
 }
 
 // Cleanup - less frequent
@@ -99,12 +113,13 @@ setInterval(() => {
   }
   
   // Cleanup old rate limit logs
-  for (const [ip, requests] of requestLog.entries()) {
-    const recentRequests = requests.filter(time => now - time < RATE_LIMIT_WINDOW);
-    if (recentRequests.length === 0) {
+  for (const [ip, ipData] of requestLog.entries()) {
+    const recentRequests = ipData.requests.filter(time => now - time < RATE_LIMIT_WINDOW);
+    if (recentRequests.length === 0 && now - ipData.lastRequest > RATE_LIMIT_WINDOW) {
       requestLog.delete(ip);
     } else {
-      requestLog.set(ip, recentRequests);
+      ipData.requests = recentRequests;
+      requestLog.set(ip, ipData);
     }
   }
 }, 60000); // Every minute
@@ -320,8 +335,13 @@ app.get('/api/deaths-fast', async (req, res) => {
   
   // Check fast cache
   if (fastDeathsCache && fastDeathsCache.worldId === worldId && Date.now() - fastDeathsTimestamp < FAST_DEATHS_CACHE) {
-    console.log(`⚡⚡ INSTANT cache hit (${Date.now() - fastDeathsTimestamp}ms old)`);
+    console.log(`⚡⚡ INSTANT cache hit (${Date.now() - fastDeathsTimestamp}ms old) (no Rubinot request)`);
     return res.json(fastDeathsCache.deaths);
+  }
+  
+  // Log non-cached request
+  if (req._rateLimitIP) {
+    logRateLimitRequest(req._rateLimitIP);
   }
   
   // Fetch deaths page (no character data!)
@@ -413,8 +433,13 @@ app.get('/api/latest-death', async (req, res) => {
   
   // Check if we have a recent latest death cached
   if (latestDeathCache && Date.now() - latestDeathTimestamp < LATEST_DEATH_CACHE) {
-    console.log(`⚡ Returning cached latest death (instant!)`);
+    console.log(`⚡ Returning cached latest death (instant!) (no Rubinot request)`);
     return res.json(latestDeathCache);
+  }
+  
+  // Log non-cached request
+  if (req._rateLimitIP) {
+    logRateLimitRequest(req._rateLimitIP);
   }
   
   // If not cached, fetch just the latest death
@@ -494,14 +519,19 @@ app.get('/api/deaths', async (req, res) => {
   const cacheKey = `deaths_${worldId}_v2`;
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    console.log(`✅ Cache hit for world ${worldId}`);
+    console.log(`✅ Cache hit for world ${worldId} (no Rubinot request)`);
     return res.json(cached.data);
+  }
+
+  // Log non-cached request (actual Rubinot fetch)
+  if (req._rateLimitIP) {
+    logRateLimitRequest(req._rateLimitIP);
   }
 
   let page = null;
 
   try {
-    console.log(`🌐 Fetching deaths for world ${worldId}...`);
+    console.log(`🌐 Fetching deaths for world ${worldId} (Rubinot request)...`);
     
     // Get browser (reuse or create)
     const browser = await getBrowser();
