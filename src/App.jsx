@@ -76,7 +76,8 @@ const getVocationEmoji = (vocation) => {
 function App() {
   const [deaths, setDeaths] = useState([]);
   const [world, setWorld] = useState("20"); // Tormentum default
-  const [minLevel, setMinLevel] = useState(0);
+  const [minLevel, setMinLevel] = useState(0); // User input (changes on every keystroke)
+  const [debouncedMinLevel, setDebouncedMinLevel] = useState(0); // Debounced value for API calls
   const [vipOnly, setVipOnly] = useState(false);
   const [newDeaths, setNewDeaths] = useState(new Set());
   const [copiedPlayer, setCopiedPlayer] = useState(null);
@@ -90,6 +91,15 @@ function App() {
   useEffect(() => {
     currentWorld.current = world;
   }, [world]);
+
+  // Debounce minLevel input - wait 800ms after user stops typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedMinLevel(minLevel);
+    }, 800); // Wait 800ms after last keystroke
+
+    return () => clearTimeout(timer); // Clear timer on every keystroke
+  }, [minLevel]);
 
   // Update current time every second for countdown timers (only when deaths visible)
   useEffect(() => {
@@ -111,10 +121,10 @@ function App() {
     try {
       fetchingRef.current = true;
 
-      // Build URL with filters
+      // Build URL with filters (use debouncedMinLevel for API calls)
       let url = `/api/deaths?world=${currentWorld.current}`;
-      if (minLevel > 0) {
-        url += `&minLevel=${minLevel}`;
+      if (debouncedMinLevel > 0) {
+        url += `&minLevel=${debouncedMinLevel}`;
       }
       if (vipOnly) {
         url += `&vip=true`;
@@ -217,7 +227,7 @@ function App() {
     if (deaths.length > 0) { // Only if we already have data
       fetchDeaths();
     }
-  }, [minLevel, vipOnly]); // Fetch when filters change
+  }, [debouncedMinLevel, vipOnly]); // Fetch when DEBOUNCED filters change
 
   const selectedServer = SERVERS.find(s => s.id === world);
 
