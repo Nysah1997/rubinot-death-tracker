@@ -317,7 +317,7 @@ function App() {
             onClick={handleApplyFilters}
             title={filtersChanged ? 'Click to apply filters' : 'No changes to apply'}
           >
-            <i className={`fa ${filtersChanged ? 'fa-refresh fa-spin-custom' : 'fa-check'}`}></i>
+            <i className={`fa ${filtersChanged ? 'fa-exclamation-circle' : 'fa-check'}`}></i>
             {filtersChanged ? ' Apply Filters' : ' Filters Applied'}
           </button>
         </div>

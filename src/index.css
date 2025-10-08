@@ -230,7 +230,11 @@ body::before {
   transition: all 0.2s ease;
   box-shadow: 0 2px 8px rgba(0, 212, 255, 0.3);
   min-width: 130px;
-  margin-top: 1.45rem;
+  margin-top: 1.2rem;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .apply-filter-btn:hover {
