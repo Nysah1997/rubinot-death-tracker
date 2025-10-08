@@ -11,16 +11,21 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Optimized caching - longer durations
+// Optimized caching - aggressive settings
 const cache = new Map();
 const characterCache = new Map();
-const CACHE_DURATION = 3000; // 3 seconds for deaths (faster updates!)
+const CACHE_DURATION = 2000; // 2 seconds for deaths (even faster updates!)
 const CHARACTER_CACHE_DURATION = 14400000; // 4 hours (longer persistence!)
 
 // Store the very latest death separately for instant access
 let latestDeathCache = null;
 let latestDeathTimestamp = 0;
-const LATEST_DEATH_CACHE = 2000; // 2 seconds only for latest death
+const LATEST_DEATH_CACHE = 1500; // 1.5 seconds only for latest death
+
+// ULTRA-FAST: Store deaths without character data for instant response
+let fastDeathsCache = null;
+let fastDeathsTimestamp = 0;
+const FAST_DEATHS_CACHE = 1000; // 1 second cache for instant deaths
 
 // Browser instance for reuse
 let sharedBrowser = null;
@@ -114,19 +119,21 @@ async function fetchCharacterData(page, playerLink, playerName) {
   try {
     await page.goto(playerLink, {
       waitUntil: "domcontentloaded",
-      timeout: 15000 // Increased timeout
+      timeout: 10000 // Reduced for speed!
     });
 
     // Try to wait for content, but continue if it fails
     try {
-      await page.waitForSelector("div.TableContentContainer", { timeout: 8000 });
+      await page.waitForSelector("div.TableContentContainer", { timeout: 5000 }); // Aggressive timeout!
     } catch (selectorError) {
-      console.warn(`⚠️  ${playerName}: Slow page load, continuing anyway...`);
-      // Check if page loaded at all
-      const hasAnyContent = await page.evaluate(() => document.body && document.body.textContent.length > 0);
-      if (!hasAnyContent) {
-        throw new Error("Page didn't load any content");
-      }
+      console.warn(`⚠️  ${playerName}: Slow page, skipping...`);
+      // Return immediately with Unknown values
+      return {
+        vocation: "Unknown",
+        residence: "Unknown",
+        accountStatus: "Free Account",
+        guild: "No Guild"
+      };
     }
 
     const characterData = await page.evaluate(() => {
@@ -242,6 +249,99 @@ async function fetchSingleCharacter(browser, death) {
     };
   }
 }
+
+// ULTRA-FAST: Get deaths WITHOUT character data (instant response!)
+app.get('/api/deaths-fast', async (req, res) => {
+  const worldId = req.query.world || "20";
+  
+  // Check fast cache
+  if (fastDeathsCache && fastDeathsCache.worldId === worldId && Date.now() - fastDeathsTimestamp < FAST_DEATHS_CACHE) {
+    console.log(`⚡⚡ INSTANT cache hit (${Date.now() - fastDeathsTimestamp}ms old)`);
+    return res.json(fastDeathsCache.deaths);
+  }
+  
+  // Fetch deaths page (no character data!)
+  try {
+    const browser = await getBrowser();
+    const page = await browser.newPage();
+    
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+    await page.setViewport({ width: 600, height: 300 }); // Tiny viewport for speed
+    
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      if (['image', 'stylesheet', 'font', 'media', 'websocket'].includes(req.resourceType())) {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
+    
+    const url = `https://rubinot.com.br/?subtopic=latestdeaths&world=${worldId}`;
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
+    
+    try {
+      await page.waitForSelector("div.TableContentContainer table.TableContent", { timeout: 8000 });
+    } catch (e) {
+      // Continue
+    }
+    
+    // Parse deaths (no character data lookup!)
+    const deaths = await page.evaluate(() => {
+      const rows = document.querySelectorAll("div.TableContentContainer table.TableContent tr");
+      const arr = [];
+      let count = 0;
+      const MAX_DEATHS = 10;
+
+      for (let i = 0; i < rows.length && count < MAX_DEATHS; i++) {
+        const row = rows[i];
+        const tds = row.querySelectorAll("td");
+        if (tds.length < 3) continue;
+
+        const time = tds[1]?.innerText.trim();
+        const playerLink = tds[2]?.querySelector("a")?.href || null;
+        const player = tds[2]?.querySelector("a")?.innerText.trim() || null;
+
+        const text = tds[2]?.innerText.replace(/\s+/g, " ") || "";
+        const levelMatch = text.match(/level\s*(\d+)/i);
+        if (!levelMatch || !player) continue;
+
+        const level = parseInt(levelMatch[1]);
+        let cause = text.replace(/^.*?died at level \d+ by\s+/i, "");
+        cause = cause.replace(/\.$/, "");
+
+        arr.push({ 
+          player, 
+          playerLink, 
+          level, 
+          cause, 
+          time,
+          // Placeholders for immediate display
+          vocation: "Loading...",
+          residence: "Loading...",
+          accountStatus: "Loading...",
+          guild: "Loading..."
+        });
+        count++;
+      }
+
+      return arr;
+    });
+    
+    await page.close();
+    
+    // Cache it
+    fastDeathsCache = { worldId, deaths };
+    fastDeathsTimestamp = Date.now();
+    
+    console.log(`⚡⚡ FAST fetch: ${deaths.length} deaths in <1s`);
+    return res.json(deaths);
+    
+  } catch (error) {
+    console.error("❌ Fast fetch error:", error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
 
 // NEW: Get ONLY the latest death (super fast!)
 app.get('/api/latest-death', async (req, res) => {
@@ -426,8 +526,17 @@ app.get('/api/deaths', async (req, res) => {
       return res.json(emptyResult);
     }
 
-    // Fetch character data for latest 5 deaths
-    const latestDeaths = deaths.slice(0, 5);
+    // Fetch character data for latest 3 deaths only (faster!)
+    const latestDeaths = deaths.slice(0, 3);
+    
+    // Return basic deaths for items 4-10 without character data
+    const quickDeaths = deaths.slice(3).map(death => ({
+      ...death,
+      vocation: "Not fetched",
+      residence: "Not fetched",
+      accountStatus: "Free Account",
+      guild: "No Guild"
+    }));
     
     // PRIORITY FETCHING - fetch latest death FIRST, then others in parallel!
     const [firstDeath, ...otherDeaths] = latestDeaths;
@@ -504,8 +613,8 @@ app.get('/api/deaths', async (req, res) => {
     // Wait for all character fetches to complete (parallel!)
     const otherDeathsData = await Promise.all(characterPromises);
     
-    // Combine: latest death first, then others
-    const deathsWithCharacterData = [firstDeathData, ...otherDeathsData];
+    // Combine: latest death first, then others with character data, then quick deaths
+    const deathsWithCharacterData = [firstDeathData, ...otherDeathsData, ...quickDeaths];
 
     console.log(`✅ Processed ${deathsWithCharacterData.length} deaths (priority fetch)`);
 
