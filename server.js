@@ -1,4 +1,5 @@
-// Express server for Render.com with Puppeteer
+// Optimized Express server for Render.com with Puppeteer
+// Memory-efficient with browser reuse
 import express from 'express';
 import puppeteer from 'puppeteer';
 import path from 'path';
@@ -16,20 +17,77 @@ const characterCache = new Map();
 const CACHE_DURATION = 2000;
 const CHARACTER_CACHE_DURATION = 3600000;
 
+// Browser instance management - REUSE browser for better memory
+let sharedBrowser = null;
+let browserLastUsed = Date.now();
+const BROWSER_IDLE_TIMEOUT = 300000; // Close browser after 5 min idle
+
 // Cleanup
 setInterval(() => {
   const now = Date.now();
+  
+  // Clean deaths cache
   for (const [key, value] of cache.entries()) {
     if (now - value.timestamp > CACHE_DURATION * 2) {
       cache.delete(key);
     }
   }
-  if (characterCache.size > 500) {
+  
+  // Clean character cache - keep max 200 (reduced from 500)
+  if (characterCache.size > 200) {
     const entries = Array.from(characterCache.entries());
     entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
-    entries.slice(0, 100).forEach(([key]) => characterCache.delete(key));
+    entries.slice(0, 50).forEach(([key]) => characterCache.delete(key));
+  }
+  
+  // Close browser if idle for too long to save memory
+  if (sharedBrowser && (now - browserLastUsed > BROWSER_IDLE_TIMEOUT)) {
+    console.log('🧹 Closing idle browser to save memory...');
+    sharedBrowser.close().catch(err => console.error('Error closing browser:', err));
+    sharedBrowser = null;
   }
 }, 10000);
+
+// Get or create browser instance
+async function getBrowser() {
+  if (sharedBrowser && sharedBrowser.isConnected()) {
+    console.log('♻️ Reusing existing browser');
+    browserLastUsed = Date.now();
+    return sharedBrowser;
+  }
+  
+  console.log('🚀 Launching new browser...');
+  sharedBrowser = await puppeteer.launch({
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-software-rasterizer',
+      '--disable-extensions',
+      '--disable-default-apps',
+      '--disable-sync',
+      '--disable-translate',
+      '--disable-background-networking',
+      '--disable-background-timer-throttling',
+      '--disable-client-side-phishing-detection',
+      '--disable-hang-monitor',
+      '--disable-popup-blocking',
+      '--disable-prompt-on-repost',
+      '--disable-domain-reliability',
+      '--disable-component-update',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-features=site-per-process',
+      '--single-process' // CRITICAL for memory savings
+    ],
+    headless: true,
+    timeout: 15000,
+  });
+  
+  browserLastUsed = Date.now();
+  return sharedBrowser;
+}
 
 // Serve static files from dist
 app.use(express.static(path.join(__dirname, 'dist')));
@@ -58,45 +116,24 @@ app.get('/api/deaths', async (req, res) => {
     return res.json(cached.data);
   }
 
-  let browser = null;
+  let page = null;
 
   try {
-    console.log(`🌐 Launching browser for world ${worldId}...`);
+    console.log(`🌐 Fetching deaths for world ${worldId}...`);
     
-    browser = await puppeteer.launch({
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
-        '--disable-extensions',
-        '--disable-plugins',
-        '--disable-images',
-        '--disable-default-apps',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        '--disable-background-networking',
-        '--disable-background-sync'
-      ],
-      headless: true,
-      timeout: 15000,
-    });
-
-    const page = await browser.newPage();
+    // Get or create browser instance (REUSE!)
+    const browser = await getBrowser();
+    page = await browser.newPage();
     
+    // Optimize page - minimal memory footprint
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
     await page.setViewport({ width: 1280, height: 720 });
     
-    // Block images and CSS for speed
+    // Block ALL unnecessary resources - saves memory & bandwidth
     await page.setRequestInterception(true);
     page.on('request', (req) => {
       const resourceType = req.resourceType();
-      if (resourceType === 'image' || resourceType === 'stylesheet' || resourceType === 'font') {
+      if (['image', 'stylesheet', 'font', 'media', 'websocket'].includes(resourceType)) {
         req.abort();
       } else {
         req.continue();
@@ -245,26 +282,41 @@ app.get('/api/deaths', async (req, res) => {
 
     console.log(`✅ Processed ${deathsWithCharacterData.length} deaths (${cacheHits} cached, ${cacheMisses} fetched)`);
 
+    // Close the page to free memory (but keep browser open!)
+    await page.close();
+
     // Cache result
     cache.set(cacheKey, {
       data: deathsWithCharacterData,
       timestamp: Date.now()
     });
 
-    await browser.close();
     res.json(deathsWithCharacterData);
 
   } catch (err) {
     console.error("❌ Error:", err);
-    if (browser) {
+    if (page) {
       try {
-        await browser.close();
+        await page.close();
       } catch (e) {
-        console.error("Error closing browser:", e);
+        console.error("Error closing page:", e);
       }
     }
     res.status(500).json({ error: err.message });
   }
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok',
+    memory: process.memoryUsage(),
+    cache: {
+      deaths: cache.size,
+      characters: characterCache.size
+    },
+    browser: sharedBrowser ? 'alive' : 'closed'
+  });
 });
 
 // Serve index.html for all other routes (SPA)
@@ -272,9 +324,19 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('🛑 SIGTERM received, closing browser...');
+  if (sharedBrowser) {
+    await sharedBrowser.close();
+  }
+  process.exit(0);
+});
+
 app.listen(PORT, () => {
   console.log(`\n🚀 Server running on port ${PORT}`);
   console.log(`📡 API: http://localhost:${PORT}/api/deaths`);
-  console.log(`🌐 Frontend: http://localhost:${PORT}\n`);
+  console.log(`🌐 Frontend: http://localhost:${PORT}`);
+  console.log(`💾 Memory optimization: Browser reuse enabled`);
+  console.log(`🧹 Auto-cleanup: Browser closes after 5 min idle\n`);
 });
-
