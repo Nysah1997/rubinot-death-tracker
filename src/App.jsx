@@ -76,9 +76,15 @@ const getVocationEmoji = (vocation) => {
 function App() {
   const [deaths, setDeaths] = useState([]);
   const [world, setWorld] = useState("20"); // Tormentum default
-  const [minLevel, setMinLevel] = useState(0); // User input (changes on every keystroke)
-  const [debouncedMinLevel, setDebouncedMinLevel] = useState(0); // Debounced value for API calls
-  const [vipOnly, setVipOnly] = useState(false);
+  
+  // Filter UI states (what user is typing/selecting)
+  const [minLevelInput, setMinLevelInput] = useState(0);
+  const [vipOnlyInput, setVipOnlyInput] = useState(false);
+  
+  // Applied filter states (what's actually sent to API)
+  const [appliedMinLevel, setAppliedMinLevel] = useState(0);
+  const [appliedVipOnly, setAppliedVipOnly] = useState(false);
+  
   const [newDeaths, setNewDeaths] = useState(new Set());
   const [copiedPlayer, setCopiedPlayer] = useState(null);
   const [isLoadingServer, setIsLoadingServer] = useState(false);
@@ -86,8 +92,8 @@ function App() {
   const latestIds = useRef(new Set());
   const fetchingRef = useRef(false);
   const currentWorld = useRef(world);
-  const currentMinLevel = useRef(debouncedMinLevel); // Track current filter
-  const currentVipOnly = useRef(vipOnly);
+  const currentMinLevel = useRef(appliedMinLevel); // Track current filter
+  const currentVipOnly = useRef(appliedVipOnly);
 
   // Update refs whenever values change
   useEffect(() => {
@@ -95,21 +101,12 @@ function App() {
   }, [world]);
 
   useEffect(() => {
-    currentMinLevel.current = debouncedMinLevel;
-  }, [debouncedMinLevel]);
+    currentMinLevel.current = appliedMinLevel;
+  }, [appliedMinLevel]);
 
   useEffect(() => {
-    currentVipOnly.current = vipOnly;
-  }, [vipOnly]);
-
-  // Debounce minLevel input - wait 800ms after user stops typing
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedMinLevel(minLevel);
-    }, 800); // Wait 800ms after last keystroke
-
-    return () => clearTimeout(timer); // Clear timer on every keystroke
-  }, [minLevel]);
+    currentVipOnly.current = appliedVipOnly;
+  }, [appliedVipOnly]);
 
   // Update current time every second for countdown timers (only when deaths visible)
   useEffect(() => {
@@ -232,12 +229,21 @@ function App() {
     };
   }, [world]); // Only re-run when world changes!
   
-  // When filters change, just fetch new data (don't restart everything)
+  // When APPLIED filters change, just fetch new data (don't restart everything)
   useEffect(() => {
     if (deaths.length > 0) { // Only if we already have data
       fetchDeaths();
     }
-  }, [debouncedMinLevel, vipOnly]); // Fetch when DEBOUNCED filters change
+  }, [appliedMinLevel, appliedVipOnly]); // Fetch when filters are applied
+  
+  // Handle Apply Filter button
+  const handleApplyFilters = () => {
+    setAppliedMinLevel(minLevelInput);
+    setAppliedVipOnly(vipOnlyInput);
+  };
+  
+  // Check if filters have changed (show visual indicator)
+  const filtersChanged = minLevelInput !== appliedMinLevel || vipOnlyInput !== appliedVipOnly;
 
   const selectedServer = SERVERS.find(s => s.id === world);
 
@@ -268,10 +274,15 @@ function App() {
           <input
             type="number"
             placeholder="0"
-            value={minLevel === 0 ? '' : minLevel}
+            value={minLevelInput === 0 ? '' : minLevelInput}
             onChange={e => {
               const value = e.target.value;
-              setMinLevel(value === '' ? 0 : Number(value));
+              setMinLevelInput(value === '' ? 0 : Number(value));
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                handleApplyFilters();
+              }
             }}
             min="0"
           />
@@ -281,10 +292,20 @@ function App() {
           <label className="control-label">VIP Only</label>
           <input
             type="checkbox"
-            checked={vipOnly}
-            onChange={e => setVipOnly(e.target.checked)}
+            checked={vipOnlyInput}
+            onChange={e => setVipOnlyInput(e.target.checked)}
             className="checkbox-input"
           />
+        </div>
+        
+        <div className="control-group">
+          <button 
+            className={`apply-filter-btn ${filtersChanged ? 'changed' : ''}`}
+            onClick={handleApplyFilters}
+            title={filtersChanged ? 'Click to apply filters' : 'No changes to apply'}
+          >
+            {filtersChanged ? '🔄 Apply Filter' : '✅ Filters Applied'}
+          </button>
         </div>
       </div>
 
@@ -294,20 +315,17 @@ function App() {
           <p className="loading-text">Loading deaths from {selectedServer?.name}...</p>
         </div>
       ) : (() => {
-          const filteredDeaths = deaths.filter(d => {
-            const levelMatch = d.level >= minLevel;
-            const vipMatch = !vipOnly || (d.accountStatus && d.accountStatus.toLowerCase().includes("vip"));
-            return levelMatch && vipMatch;
-          });
+          // Note: Server already filters by appliedMinLevel and appliedVipOnly
+          // No need for client-side filtering since we're using the button approach
           
-          return filteredDeaths.length === 0 ? (
+          return deaths.length === 0 ? (
             <div className="empty-state">
               <h3>No deaths found</h3>
               <p>Try adjusting your minimum level filter or check back later.</p>
             </div>
           ) : (
             <div className="deaths-grid">
-              {filteredDeaths.map((d, i) => {
+              {deaths.map((d, i) => {
             const deathId = d.player + d.time;
             const isNew = newDeaths.has(deathId);
             const accountStatus = formatAccountStatus(d.accountStatus);
