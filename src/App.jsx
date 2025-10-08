@@ -75,13 +75,14 @@ const getVocationEmoji = (vocation) => {
 
 function App() {
   const [deaths, setDeaths] = useState([]);
-  const [world, setWorld] = useState("20"); // Tormentum default
   
   // Filter UI states (what user is typing/selecting)
+  const [worldInput, setWorldInput] = useState("20"); // Tormentum default
   const [minLevelInput, setMinLevelInput] = useState(0);
   const [vipOnlyInput, setVipOnlyInput] = useState(false);
   
   // Applied filter states (what's actually sent to API)
+  const [appliedWorld, setAppliedWorld] = useState("20");
   const [appliedMinLevel, setAppliedMinLevel] = useState(0);
   const [appliedVipOnly, setAppliedVipOnly] = useState(false);
   
@@ -91,14 +92,14 @@ function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const latestIds = useRef(new Set());
   const fetchingRef = useRef(false);
-  const currentWorld = useRef(world);
+  const currentWorld = useRef(appliedWorld);
   const currentMinLevel = useRef(appliedMinLevel); // Track current filter
   const currentVipOnly = useRef(appliedVipOnly);
 
   // Update refs whenever values change
   useEffect(() => {
-    currentWorld.current = world;
-  }, [world]);
+    currentWorld.current = appliedWorld;
+  }, [appliedWorld]);
 
   useEffect(() => {
     currentMinLevel.current = appliedMinLevel;
@@ -207,7 +208,7 @@ function App() {
 
   // Handle server/filter changes - only clear and restart for world changes
   useEffect(() => {
-    console.log('World changed to:', world);
+    console.log('World changed to:', appliedWorld);
     
     // IMMEDIATELY clear everything before any async operations
     setIsLoadingServer(true);
@@ -224,10 +225,10 @@ function App() {
     }, 2000);
 
     return () => {
-      console.log('Cleaning up interval for world:', world);
+      console.log('Cleaning up interval for world:', appliedWorld);
       clearInterval(interval);
     };
-  }, [world]); // Only re-run when world changes!
+  }, [appliedWorld]); // Only re-run when APPLIED world changes!
   
   // When APPLIED filters change, just fetch new data (don't restart everything)
   useEffect(() => {
@@ -238,14 +239,18 @@ function App() {
   
   // Handle Apply Filter button
   const handleApplyFilters = () => {
+    setAppliedWorld(worldInput);
     setAppliedMinLevel(minLevelInput);
     setAppliedVipOnly(vipOnlyInput);
   };
   
   // Check if filters have changed (show visual indicator)
-  const filtersChanged = minLevelInput !== appliedMinLevel || vipOnlyInput !== appliedVipOnly;
+  const filtersChanged = 
+    worldInput !== appliedWorld || 
+    minLevelInput !== appliedMinLevel || 
+    vipOnlyInput !== appliedVipOnly;
 
-  const selectedServer = SERVERS.find(s => s.id === world);
+  const selectedServer = SERVERS.find(s => s.id === appliedWorld);
 
   return (
     <div className="App">
@@ -262,7 +267,7 @@ function App() {
       <div className="controls">
         <div className="control-group">
           <label className="control-label">Server</label>
-          <select value={world} onChange={e => setWorld(e.target.value)}>
+          <select value={worldInput} onChange={e => setWorldInput(e.target.value)}>
             {SERVERS.map(s => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
