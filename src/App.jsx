@@ -266,7 +266,9 @@ function App() {
 
       <div className="controls">
         <div className="control-group">
-          <label className="control-label">Server</label>
+          <label className="control-label">
+            <i className="fa fa-globe"></i> Server
+          </label>
           <select value={worldInput} onChange={e => setWorldInput(e.target.value)}>
             {SERVERS.map(s => (
               <option key={s.id} value={s.id}>{s.name}</option>
@@ -275,7 +277,9 @@ function App() {
         </div>
 
         <div className="control-group">
-          <label className="control-label">Minimum Level</label>
+          <label className="control-label">
+            <i className="fa fa-level-up"></i> Minimum Level
+          </label>
           <input
             type="number"
             placeholder="0"
@@ -294,7 +298,9 @@ function App() {
         </div>
 
         <div className="control-group">
-          <label className="control-label">VIP Only</label>
+          <label className="control-label">
+            <i className="fa fa-diamond"></i> VIP Only
+          </label>
           <input
             type="checkbox"
             checked={vipOnlyInput}
@@ -309,7 +315,8 @@ function App() {
             onClick={handleApplyFilters}
             title={filtersChanged ? 'Click to apply filters' : 'No changes to apply'}
           >
-            {filtersChanged ? '🔄 Apply Filter' : '✅ Filters Applied'}
+            <i className={`fa ${filtersChanged ? 'fa-refresh fa-spin-custom' : 'fa-check'}`}></i>
+            {filtersChanged ? ' Apply Filters' : ' Filters Applied'}
           </button>
         </div>
       </div>
