@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 3000;
 // Optimized caching - aggressive settings to protect Rubinot server
 const cache = new Map();
 const characterCache = new Map();
-const CACHE_DURATION = 3000; // 3 seconds for deaths (balanced: fresh + protection)
+const CACHE_DURATION = 5000; // 5 seconds for deaths (balanced: fresh + protection)
 const CHARACTER_CACHE_DURATION = 86400000; // 24 hours (character data rarely changes!)
 
 // Store the very latest death separately for instant access

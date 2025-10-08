@@ -101,43 +101,26 @@ function App() {
     return () => clearInterval(timer);
   }, [deaths.length]);
 
-  // Handle server changes and auto-refresh
-  useEffect(() => {
-    console.log('Server changed to:', world);
-    
-    // IMMEDIATELY clear everything before any async operations
-    setIsLoadingServer(true);
-    setDeaths([]);
-    setNewDeaths(new Set());
-    latestIds.current.clear();
-    
-    // Also clear localStorage to prevent any cached data from showing
-    try {
-      localStorage.clear();
-    } catch (e) {
-      console.warn('Could not clear localStorage:', e);
+  // Fetch function - defined outside useEffect so it can be called anywhere
+  const fetchDeaths = async () => {
+    // Prevent multiple concurrent requests
+    if (fetchingRef.current) {
+      return;
     }
-    
-    // Fetch function - defined inside useEffect to avoid dependency issues
-    const fetchDeaths = async () => {
-      // Prevent multiple concurrent requests
-      if (fetchingRef.current) {
-        return;
+
+    try {
+      fetchingRef.current = true;
+
+      // Build URL with filters
+      let url = `/api/deaths?world=${currentWorld.current}`;
+      if (minLevel > 0) {
+        url += `&minLevel=${minLevel}`;
       }
-
-      try {
-        fetchingRef.current = true;
-
-        // Build URL with filters
-        let url = `/api/deaths?world=${currentWorld.current}`;
-        if (minLevel > 0) {
-          url += `&minLevel=${minLevel}`;
-        }
-        if (vipOnly) {
-          url += `&vip=true`;
-        }
-        
-        const res = await fetch(url);
+      if (vipOnly) {
+        url += `&vip=true`;
+      }
+      
+      const res = await fetch(url);
         
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`);
@@ -203,21 +186,38 @@ function App() {
       } finally {
         fetchingRef.current = false;
       }
-    };
+  };
+
+  // Handle server/filter changes - only clear and restart for world changes
+  useEffect(() => {
+    console.log('World changed to:', world);
+    
+    // IMMEDIATELY clear everything before any async operations
+    setIsLoadingServer(true);
+    setDeaths([]);
+    setNewDeaths(new Set());
+    latestIds.current.clear();
     
     // Initial fetch
     fetchDeaths();
     
-    // Set up auto-refresh every 3 seconds (balanced: fast updates + server protection)
+    // Set up auto-refresh every 2 seconds (fast but safe)
     const interval = setInterval(() => {
       fetchDeaths();
-    }, 3000);
+    }, 2000);
 
     return () => {
       console.log('Cleaning up interval for world:', world);
       clearInterval(interval);
     };
-  }, [world, minLevel, vipOnly]); // Re-run when filters change
+  }, [world]); // Only re-run when world changes!
+  
+  // When filters change, just fetch new data (don't restart everything)
+  useEffect(() => {
+    if (deaths.length > 0) { // Only if we already have data
+      fetchDeaths();
+    }
+  }, [minLevel, vipOnly]); // Fetch when filters change
 
   const selectedServer = SERVERS.find(s => s.id === world);
 
