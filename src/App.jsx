@@ -128,7 +128,15 @@ function App() {
       try {
         fetchingRef.current = true;
 
-        const url = `/api/deaths?world=${currentWorld.current}`;
+        // Build URL with filters
+        let url = `/api/deaths?world=${currentWorld.current}`;
+        if (minLevel > 0) {
+          url += `&minLevel=${minLevel}`;
+        }
+        if (vipOnly) {
+          url += `&vip=true`;
+        }
+        
         const res = await fetch(url);
         
         if (!res.ok) {
@@ -209,7 +217,7 @@ function App() {
       console.log('Cleaning up interval for world:', world);
       clearInterval(interval);
     };
-  }, [world]);
+  }, [world, minLevel, vipOnly]); // Re-run when filters change
 
   const selectedServer = SERVERS.find(s => s.id === world);
 
