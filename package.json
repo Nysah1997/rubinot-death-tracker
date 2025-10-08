@@ -8,8 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "dev": "vite",
-    "dev:server": "npm run build && node server.js",
-    "postinstall": "npx puppeteer browsers install chrome || echo 'Chrome install failed'"
+    "dev:server": "npm run build && node server.js"
   },
   "dependencies": {
     "express": "^4.21.2",
