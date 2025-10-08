@@ -11,25 +11,76 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Optimized caching - aggressive settings
+// Optimized caching - aggressive settings to protect Rubinot server
 const cache = new Map();
 const characterCache = new Map();
-const CACHE_DURATION = 2000; // 2 seconds for deaths (even faster updates!)
+const CACHE_DURATION = 3000; // 3 seconds for deaths (balanced: fresh + protection)
 const CHARACTER_CACHE_DURATION = 86400000; // 24 hours (character data rarely changes!)
 
 // Store the very latest death separately for instant access
 let latestDeathCache = null;
 let latestDeathTimestamp = 0;
-const LATEST_DEATH_CACHE = 1500; // 1.5 seconds only for latest death
+const LATEST_DEATH_CACHE = 2000; // 2 seconds only for latest death
 
 // ULTRA-FAST: Store deaths without character data for instant response
 let fastDeathsCache = null;
 let fastDeathsTimestamp = 0;
-const FAST_DEATHS_CACHE = 1000; // 1 second cache for instant deaths
+const FAST_DEATHS_CACHE = 2000; // 2 second cache for instant deaths
 
 // Browser instance for reuse
 let sharedBrowser = null;
 let browserLaunching = false;
+
+// Rate limiting protection to avoid IP blocking
+const requestLog = new Map(); // Track requests per IP
+const RATE_LIMIT_WINDOW = 60000; // 1 minute window
+const MAX_REQUESTS_PER_MINUTE = 20; // Max 20 API calls per minute per IP
+const MIN_REQUEST_INTERVAL = 1000; // Minimum 1 second between requests from same IP
+
+// Rate limiting middleware
+function rateLimitMiddleware(req, res, next) {
+  const ip = req.ip || req.connection.remoteAddress || 'unknown';
+  const now = Date.now();
+  
+  // Get or create request log for this IP
+  if (!requestLog.has(ip)) {
+    requestLog.set(ip, []);
+  }
+  
+  const requests = requestLog.get(ip);
+  
+  // Remove old requests outside the time window
+  const recentRequests = requests.filter(time => now - time < RATE_LIMIT_WINDOW);
+  
+  // Check rate limit
+  if (recentRequests.length >= MAX_REQUESTS_PER_MINUTE) {
+    console.warn(`⚠️  Rate limit exceeded for IP ${ip}: ${recentRequests.length} requests/minute`);
+    return res.status(429).json({ 
+      error: 'Rate limit exceeded. Please slow down.',
+      retryAfter: Math.ceil((recentRequests[0] + RATE_LIMIT_WINDOW - now) / 1000)
+    });
+  }
+  
+  // Check minimum interval (spam protection)
+  if (recentRequests.length > 0) {
+    const lastRequest = recentRequests[recentRequests.length - 1];
+    const timeSinceLastRequest = now - lastRequest;
+    
+    if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+      console.warn(`⚠️  Request too fast from IP ${ip}: ${timeSinceLastRequest}ms since last request`);
+      return res.status(429).json({ 
+        error: 'Requests too frequent. Please wait 1 second between requests.',
+        retryAfter: 1
+      });
+    }
+  }
+  
+  // Log this request
+  recentRequests.push(now);
+  requestLog.set(ip, recentRequests);
+  
+  next();
+}
 
 // Cleanup - less frequent
 setInterval(() => {
@@ -45,6 +96,16 @@ setInterval(() => {
     const entries = Array.from(characterCache.entries());
     entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
     entries.slice(0, 30).forEach(([key]) => characterCache.delete(key));
+  }
+  
+  // Cleanup old rate limit logs
+  for (const [ip, requests] of requestLog.entries()) {
+    const recentRequests = requests.filter(time => now - time < RATE_LIMIT_WINDOW);
+    if (recentRequests.length === 0) {
+      requestLog.delete(ip);
+    } else {
+      requestLog.set(ip, recentRequests);
+    }
   }
 }, 60000); // Every minute
 
@@ -249,6 +310,9 @@ async function fetchSingleCharacter(browser, death) {
     };
   }
 }
+
+// Apply rate limiting to all API endpoints
+app.use('/api', rateLimitMiddleware);
 
 // ULTRA-FAST: Get deaths WITHOUT character data (instant response!)
 app.get('/api/deaths-fast', async (req, res) => {
