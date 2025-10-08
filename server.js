@@ -332,9 +332,14 @@ app.use('/api', rateLimitMiddleware);
 // ULTRA-FAST: Get deaths WITHOUT character data (instant response!)
 app.get('/api/deaths-fast', async (req, res) => {
   const worldId = req.query.world || "20";
+  const minLevel = req.query.minLevel || req.query.min_level || "1";
+  const vipFilter = req.query.vip === "true" ? "1" : "0";
+  
+  // Build cache key with filters
+  const fastCacheKey = `${worldId}_${minLevel}_${vipFilter}`;
   
   // Check fast cache
-  if (fastDeathsCache && fastDeathsCache.worldId === worldId && Date.now() - fastDeathsTimestamp < FAST_DEATHS_CACHE) {
+  if (fastDeathsCache && fastDeathsCache.key === fastCacheKey && Date.now() - fastDeathsTimestamp < FAST_DEATHS_CACHE) {
     console.log(`⚡⚡ INSTANT cache hit (${Date.now() - fastDeathsTimestamp}ms old) (no Rubinot request)`);
     return res.json(fastDeathsCache.deaths);
   }
@@ -361,7 +366,15 @@ app.get('/api/deaths-fast', async (req, res) => {
       }
     });
     
-    const url = `https://rubinot.com.br/?subtopic=latestdeaths&world=${worldId}`;
+    // Build URL with Rubinot's filters
+    let url = `https://rubinot.com.br/?subtopic=latestdeaths&world=${worldId}`;
+    if (minLevel && parseInt(minLevel) > 1) {
+      url += `&min_level=${minLevel}`;
+    }
+    if (vipFilter === "1") {
+      url += `&vip=${vipFilter}`;
+    }
+    
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
     
     try {
@@ -414,11 +427,11 @@ app.get('/api/deaths-fast', async (req, res) => {
     
     await page.close();
     
-    // Cache it
-    fastDeathsCache = { worldId, deaths };
+    // Cache it with filter key
+    fastDeathsCache = { key: fastCacheKey, deaths };
     fastDeathsTimestamp = Date.now();
     
-    console.log(`⚡⚡ FAST fetch: ${deaths.length} deaths in <1s`);
+    console.log(`⚡⚡ FAST fetch: ${deaths.length} deaths (level ${minLevel}+) in <1s`);
     return res.json(deaths);
     
   } catch (error) {
@@ -513,13 +526,29 @@ app.get('/api/latest-death', async (req, res) => {
 // API endpoint - ULTRA FAST!
 app.get('/api/deaths', async (req, res) => {
   const worldId = req.query.world || "20";
-  const url = `https://rubinot.com.br/?subtopic=latestdeaths&world=${worldId}`;
+  const minLevel = req.query.minLevel || req.query.min_level || "1";
+  const vipFilter = req.query.vip === "true" ? "1" : "0";
+  
+  // Build URL with Rubinot's built-in filters!
+  let url = `https://rubinot.com.br/?subtopic=latestdeaths&world=${worldId}`;
+  
+  // Add level filter (uses Rubinot's native filter!)
+  if (minLevel && parseInt(minLevel) > 1) {
+    url += `&min_level=${minLevel}`;
+    console.log(`🎯 Using Rubinot's level filter: ${minLevel}+`);
+  }
+  
+  // Add VIP filter if requested
+  if (vipFilter === "1") {
+    url += `&vip=${vipFilter}`;
+    console.log(`👑 Using Rubinot's VIP filter`);
+  }
 
-  // Check cache
-  const cacheKey = `deaths_${worldId}_v2`;
+  // Check cache (include filters in cache key!)
+  const cacheKey = `deaths_${worldId}_${minLevel}_${vipFilter}_v3`;
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    console.log(`✅ Cache hit for world ${worldId} (no Rubinot request)`);
+    console.log(`✅ Cache hit for world ${worldId}, level ${minLevel}+ (no Rubinot request)`);
     return res.json(cached.data);
   }
 
