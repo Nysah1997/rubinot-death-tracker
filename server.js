@@ -204,10 +204,25 @@ app.get('/api/deaths', async (req, res) => {
     
     await page.goto(url, { 
       waitUntil: "domcontentloaded",
-      timeout: 20000 
+      timeout: 30000 // Longer timeout for slow servers
     });
 
-    await page.waitForSelector("div.TableContentContainer table.TableContent", { timeout: 10000 });
+    // Try to wait for table, if fails, check if page loaded anyway
+    try {
+      await page.waitForSelector("div.TableContentContainer table.TableContent", { timeout: 15000 });
+    } catch (timeoutError) {
+      // Check if page has any content at all
+      const hasContent = await page.evaluate(() => {
+        return document.querySelector("div.TableContentContainer") !== null;
+      });
+      
+      if (!hasContent) {
+        throw new Error(`Server ${worldId} page didn't load properly - might be offline or slow`);
+      }
+      
+      // Page loaded but table took too long, try to continue anyway
+      console.log(`⚠️  Table took longer than expected, continuing...`);
+    }
 
     // Parse only first 10 deaths (not 300!)
     const deaths = await page.evaluate(() => {
@@ -241,6 +256,20 @@ app.get('/api/deaths', async (req, res) => {
     });
 
     console.log(`✅ Parsed ${deaths.length} deaths`);
+
+    // If no deaths found, return empty array with cache
+    if (deaths.length === 0) {
+      console.log(`⚠️  No deaths found for world ${worldId}`);
+      await page.close();
+      
+      const emptyResult = [];
+      cache.set(cacheKey, {
+        data: emptyResult,
+        timestamp: Date.now()
+      });
+      
+      return res.json(emptyResult);
+    }
 
     // Fetch character data for latest 5 deaths
     const latestDeaths = deaths.slice(0, 5);
