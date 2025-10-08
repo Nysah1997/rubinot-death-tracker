@@ -97,12 +97,14 @@ app.get('/api/deaths', async (req, res) => {
       }
     });
     
+    console.log(`📡 Navigating to: ${url}`);
     await page.goto(url, { 
       waitUntil: "domcontentloaded",
-      timeout: 10000 
+      timeout: 30000 
     });
 
-    await page.waitForSelector("div.TableContentContainer table.TableContent", { timeout: 5000 });
+    console.log(`⏳ Waiting for table...`);
+    await page.waitForSelector("div.TableContentContainer table.TableContent", { timeout: 15000 });
 
     const deaths = await page.evaluate(() => {
       const rows = document.querySelectorAll("div.TableContentContainer table.TableContent tr");
