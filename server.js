@@ -565,48 +565,101 @@ app.get('/api/deaths', async (req, res) => {
   }
 
   let page = null;
+  let retryCount = 0;
+  const MAX_RETRIES = 2;
 
   try {
     console.log(`🌐 Fetching deaths for world ${worldId} (Rubinot request)...`);
     
     // Get browser (reuse or create)
     const browser = await getBrowser();
-    page = await browser.newPage();
     
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-    await page.setViewport({ width: 1024, height: 600 }); // Smaller viewport
-    
-    // Block resources
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      const resourceType = req.resourceType();
-      if (['image', 'stylesheet', 'font', 'media', 'websocket'].includes(resourceType)) {
-        req.abort();
-      } else {
-        req.continue();
-      }
-    });
-    
-    await page.goto(url, { 
-      waitUntil: "domcontentloaded",
-      timeout: 30000 // Longer timeout for slow servers
-    });
+    // SMART RETRY LOGIC with fast bailout
+    while (retryCount <= MAX_RETRIES) {
+      try {
+        page = await browser.newPage();
+        
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+        await page.setViewport({ width: 1024, height: 600 }); // Smaller viewport
+        
+        // Block resources
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+          const resourceType = req.resourceType();
+          if (['image', 'stylesheet', 'font', 'media', 'websocket'].includes(resourceType)) {
+            req.abort();
+          } else {
+            req.continue();
+          }
+        });
+        
+        // FAST LOAD: Shorter timeout on first try, get out quickly if slow
+        const gotoTimeout = retryCount === 0 ? 8000 : 15000; // 8s first, 15s retry
+        const startTime = Date.now();
+        
+        await page.goto(url, { 
+          waitUntil: "domcontentloaded",
+          timeout: gotoTimeout
+        });
 
-    // Try to wait for table, if fails, check if page loaded anyway
-    try {
-      await page.waitForSelector("div.TableContentContainer table.TableContent", { timeout: 15000 });
-    } catch (timeoutError) {
-      // Check if page has any content at all
-      const hasContent = await page.evaluate(() => {
-        return document.querySelector("div.TableContentContainer") !== null;
-      });
-      
-      if (!hasContent) {
-        throw new Error(`Server ${worldId} page didn't load properly - might be offline or slow`);
+        const loadTime = Date.now() - startTime;
+        console.log(`⏱️  Page loaded in ${loadTime}ms (attempt ${retryCount + 1})`);
+
+        // Try to wait for table with SHORT timeout
+        try {
+          await page.waitForSelector("div.TableContentContainer table.TableContent", { timeout: 5000 });
+          console.log(`✅ Table found!`);
+          break; // Success! Exit retry loop
+        } catch (selectorError) {
+          // Check if page has any content at all
+          const hasContent = await page.evaluate(() => {
+            return document.querySelector("div.TableContentContainer") !== null;
+          });
+          
+          if (hasContent) {
+            // Page loaded but table slow, continue anyway
+            console.log(`⚠️  Table slow but container exists, continuing...`);
+            break; // Exit retry loop
+          }
+          
+          // No content at all, might need retry
+          throw new Error(`No table container found`);
+        }
+        
+      } catch (attemptError) {
+        console.warn(`⚠️  Attempt ${retryCount + 1} failed: ${attemptError.message}`);
+        
+        if (page && !page.isClosed()) {
+          await page.close().catch(() => {});
+        }
+        
+        retryCount++;
+        
+        // If we've exhausted retries, check for stale cache
+        if (retryCount > MAX_RETRIES) {
+          // FALLBACK: Use stale cache if available (better than nothing!)
+          if (cached) {
+            console.log(`🔄 Server slow, returning STALE cache (${Math.round((Date.now() - cached.timestamp) / 1000)}s old)`);
+            
+            // Apply client-side VIP filter if requested
+            if (vipFilter) {
+              const vipDeaths = cached.data.filter(death => 
+                death.accountStatus && death.accountStatus.toLowerCase().includes('vip')
+              );
+              return res.json(vipDeaths);
+            }
+            
+            return res.json(cached.data);
+          }
+          
+          // No cache available, throw error
+          throw new Error(`Server ${worldId} unreachable after ${MAX_RETRIES + 1} attempts (took too long)`);
+        }
+        
+        // Wait a bit before retry
+        console.log(`🔄 Retrying in 1s...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-      
-      // Page loaded but table took too long, try to continue anyway
-      console.log(`⚠️  Table took longer than expected, continuing...`);
     }
 
     // Parse only first 10 deaths (not 300!)
