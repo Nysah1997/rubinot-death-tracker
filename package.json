@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "vite",
+    "start": "node server.js",
     "build": "vite build",
     "preview": "vite preview",
-    "dev": "netlify dev"
+    "dev": "vite"
   },
   "dependencies": {
+    "express": "^4.21.2",
+    "puppeteer": "^22.15.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

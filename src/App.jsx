@@ -128,7 +128,7 @@ function App() {
       try {
         fetchingRef.current = true;
 
-        const url = `/.netlify/functions/deaths?world=${currentWorld.current}`;
+        const url = `/api/deaths?world=${currentWorld.current}`;
         const res = await fetch(url);
         
         if (!res.ok) {

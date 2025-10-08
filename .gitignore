@@ -20,5 +20,10 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Netlify
+# Netlify (not needed for Render)
 .netlify/
+netlify/
+netlify.toml
+
+# Test files
+test-*.js
