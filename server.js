@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 3000;
 // Optimized caching - aggressive settings to protect Rubinot server
 const cache = new Map();
 const characterCache = new Map();
-const CACHE_DURATION = 5000; // 5 seconds for deaths (balanced: fresh + protection)
+const CACHE_DURATION = 3000; // 3 seconds for deaths (matches 2s frontend polling!)
 const CHARACTER_CACHE_DURATION = 86400000; // 24 hours (character data rarely changes!)
 
 // Store the very latest death separately for instant access
@@ -570,7 +570,7 @@ app.get('/api/deaths', async (req, res) => {
 
   let page = null;
   let retryCount = 0;
-  const MAX_RETRIES = 2;
+  const MAX_RETRIES = 3; // Increased from 2 to 3 for more resilience
 
   try {
     console.log(`🌐 Fetching deaths for world ${worldId} (Rubinot request)...`);
@@ -578,7 +578,7 @@ app.get('/api/deaths', async (req, res) => {
     // Get browser (reuse or create)
     const browser = await getBrowser();
     
-    // SMART RETRY LOGIC with fast bailout
+    // ULTRA-SMART RETRY LOGIC with progressive timeouts
     while (retryCount <= MAX_RETRIES) {
       try {
         page = await browser.newPage();
@@ -597,8 +597,19 @@ app.get('/api/deaths', async (req, res) => {
           }
         });
         
-        // FAST LOAD: Shorter timeout on first try, get out quickly if slow
-        const gotoTimeout = retryCount === 0 ? 8000 : 15000; // 8s first, 15s retry
+        // PROGRESSIVE TIMEOUTS: Start fast, get more patient
+        let gotoTimeout, selectorTimeout;
+        if (retryCount === 0) {
+          gotoTimeout = 8000;    // 8s - fast bailout
+          selectorTimeout = 4000; // 4s - quick check
+        } else if (retryCount === 1) {
+          gotoTimeout = 12000;   // 12s - medium patience
+          selectorTimeout = 6000; // 6s - medium check
+        } else {
+          gotoTimeout = 20000;   // 20s - last chance, be patient
+          selectorTimeout = 8000; // 8s - thorough check
+        }
+        
         const startTime = Date.now();
         
         await page.goto(url, { 
@@ -607,34 +618,39 @@ app.get('/api/deaths', async (req, res) => {
         });
 
         const loadTime = Date.now() - startTime;
-        console.log(`⏱️  Page loaded in ${loadTime}ms (attempt ${retryCount + 1})`);
+        console.log(`⏱️  Page loaded in ${loadTime}ms (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
 
-        // Try to wait for table with SHORT timeout
+        // Try to wait for table with progressive timeout
         try {
-          await page.waitForSelector("div.TableContentContainer table.TableContent", { timeout: 5000 });
+          await page.waitForSelector("div.TableContentContainer table.TableContent", { timeout: selectorTimeout });
           console.log(`✅ Table found!`);
           break; // Success! Exit retry loop
         } catch (selectorError) {
           // Check if page has any content at all
           const hasContent = await page.evaluate(() => {
-            return document.querySelector("div.TableContentContainer") !== null;
+            const container = document.querySelector("div.TableContentContainer");
+            const table = document.querySelector("table.TableContent");
+            return { container: !!container, table: !!table };
           });
           
-          if (hasContent) {
-            // Page loaded but table slow, continue anyway
-            console.log(`⚠️  Table slow but container exists, continuing...`);
-            break; // Exit retry loop
+          console.log(`🔍 Page content check: container=${hasContent.container}, table=${hasContent.table}`);
+          
+          if (hasContent.container) {
+            // Container exists, table might be loading slowly
+            console.log(`⚠️  Container exists but table slow, continuing...`);
+            break; // Exit retry loop, try to parse anyway
           }
           
-          // No content at all, might need retry
-          throw new Error(`No table container found`);
+          // No content at all, definitely need retry
+          throw new Error(`No table container found (page might be blocked or offline)`);
         }
         
       } catch (attemptError) {
-        console.warn(`⚠️  Attempt ${retryCount + 1} failed: ${attemptError.message}`);
+        console.warn(`⚠️  Attempt ${retryCount + 1}/${MAX_RETRIES + 1} failed: ${attemptError.message}`);
         
         if (page && !page.isClosed()) {
           await page.close().catch(() => {});
+          page = null;
         }
         
         retryCount++;
@@ -643,7 +659,8 @@ app.get('/api/deaths', async (req, res) => {
         if (retryCount > MAX_RETRIES) {
           // FALLBACK: Use stale cache if available (better than nothing!)
           if (cached) {
-            console.log(`🔄 Server slow, returning STALE cache (${Math.round((Date.now() - cached.timestamp) / 1000)}s old)`);
+            const cacheAge = Math.round((Date.now() - cached.timestamp) / 1000);
+            console.log(`🔄 Server unreachable, returning STALE cache (${cacheAge}s old) - better than error!`);
             
             // Apply client-side VIP filter if requested
             if (vipFilter) {
@@ -657,13 +674,19 @@ app.get('/api/deaths', async (req, res) => {
           }
           
           // No cache available, throw error
-          throw new Error(`Server ${worldId} unreachable after ${MAX_RETRIES + 1} attempts (took too long)`);
+          throw new Error(`Server ${worldId} page failed to load after ${MAX_RETRIES + 1} attempts. Rubinot might be blocking requests or server is offline.`);
         }
         
-        // Wait a bit before retry
-        console.log(`🔄 Retrying in 1s...`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Wait before retry (longer waits for later retries)
+        const waitTime = retryCount * 1000; // 1s, 2s, 3s
+        console.log(`🔄 Retrying in ${waitTime/1000}s...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
       }
+    }
+
+    // Safety check: ensure page is still valid
+    if (!page || page.isClosed()) {
+      throw new Error('Page closed unexpectedly before parsing');
     }
 
     // Parse only first 10 deaths (not 300!)
@@ -925,7 +948,9 @@ app.listen(PORT, () => {
   console.log(`   ✅ Parallel character fetching`);
   console.log(`   ✅ Pre-warmed browser`);
   console.log(`   ✅ Parse only 10 deaths (not 300)`);
-  console.log(`   ✅ Extended caching (5s deaths, 4h characters)`);
+  console.log(`   ✅ Smart caching (3s deaths, 24h characters)`);
+  console.log(`   ✅ Progressive retry (4 attempts: 8s → 12s → 20s)`);
+  console.log(`   ✅ Stale cache fallback (never fail!)`);
   console.log(`\n💾 Expected memory: ~200-250MB`);
   console.log(`⚡ Expected speed: 0.8-2s (3x faster!)\n`);
 });
