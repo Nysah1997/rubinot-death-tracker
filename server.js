@@ -285,9 +285,6 @@ app.get('/api/deaths', async (req, res) => {
 
     console.log(`✅ Processed ${deathsWithCharacterData.length} deaths (${cacheHits} cached, ${cacheMisses} fetched)`);
 
-    // Close the page to free memory (but keep browser open!)
-    await page.close();
-
     // Cache result
     cache.set(cacheKey, {
       data: deathsWithCharacterData,
@@ -296,17 +293,29 @@ app.get('/api/deaths', async (req, res) => {
 
     res.json(deathsWithCharacterData);
 
-  } catch (err) {
-    console.error("❌ Error:", err);
-    console.error("❌ Error stack:", err.stack);
-    if (page) {
+    // Close the page AFTER response is sent to free memory
+    if (page && !page.isClosed()) {
       try {
         await page.close();
       } catch (e) {
-        console.error("Error closing page:", e);
+        // Ignore errors when closing
       }
     }
+
+  } catch (err) {
+    console.error("❌ Error:", err);
+    console.error("❌ Error stack:", err.stack);
+    
     res.status(500).json({ error: err.message, stack: err.stack });
+    
+    // Try to close page after error
+    if (page && !page.isClosed()) {
+      try {
+        await page.close();
+      } catch (e) {
+        // Ignore close errors
+      }
+    }
   }
 });
 
