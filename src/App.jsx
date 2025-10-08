@@ -86,11 +86,21 @@ function App() {
   const latestIds = useRef(new Set());
   const fetchingRef = useRef(false);
   const currentWorld = useRef(world);
+  const currentMinLevel = useRef(debouncedMinLevel); // Track current filter
+  const currentVipOnly = useRef(vipOnly);
 
-  // Update current world ref whenever world changes
+  // Update refs whenever values change
   useEffect(() => {
     currentWorld.current = world;
   }, [world]);
+
+  useEffect(() => {
+    currentMinLevel.current = debouncedMinLevel;
+  }, [debouncedMinLevel]);
+
+  useEffect(() => {
+    currentVipOnly.current = vipOnly;
+  }, [vipOnly]);
 
   // Debounce minLevel input - wait 800ms after user stops typing
   useEffect(() => {
@@ -111,7 +121,7 @@ function App() {
     return () => clearInterval(timer);
   }, [deaths.length]);
 
-  // Fetch function - defined outside useEffect so it can be called anywhere
+  // Fetch function - uses refs to always get latest values
   const fetchDeaths = async () => {
     // Prevent multiple concurrent requests
     if (fetchingRef.current) {
@@ -121,12 +131,12 @@ function App() {
     try {
       fetchingRef.current = true;
 
-      // Build URL with filters (use debouncedMinLevel for API calls)
+      // Build URL with filters (use refs to get latest values)
       let url = `/api/deaths?world=${currentWorld.current}`;
-      if (debouncedMinLevel > 0) {
-        url += `&minLevel=${debouncedMinLevel}`;
+      if (currentMinLevel.current > 0) {
+        url += `&minLevel=${currentMinLevel.current}`;
       }
-      if (vipOnly) {
+      if (currentVipOnly.current) {
         url += `&vip=true`;
       }
       
