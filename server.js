@@ -380,6 +380,16 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Serve favicon (skull emoji)
+app.get('/favicon.ico', (req, res) => {
+  // Send a simple SVG skull as favicon
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <text y="80" font-size="80">💀</text>
+  </svg>`;
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.send(svg);
+});
+
 // SPA routing
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
