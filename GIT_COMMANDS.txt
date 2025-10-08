@@ -1,0 +1,120 @@
+═══════════════════════════════════════════════════════════════
+  GIT COMMANDS CHEAT SHEET - Copy & Paste
+═══════════════════════════════════════════════════════════════
+
+📌 FIRST TIME SETUP (Run these once)
+═══════════════════════════════════════════════════════════════
+
+1. Install Git from: https://git-scm.com/download/win
+
+2. Open PowerShell in death-tracker folder
+
+3. Run these commands (replace YOUR info):
+
+git init
+git config user.name "Your Name"
+git config user.email "your.email@example.com"
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+git branch -M main
+git push -u origin main
+
+═══════════════════════════════════════════════════════════════
+
+🔄 PUSHING UPDATES (Every time you make changes)
+═══════════════════════════════════════════════════════════════
+
+git add .
+git commit -m "Describe what you changed"
+git push
+
+# Netlify automatically deploys in ~2 minutes! ✅
+
+═══════════════════════════════════════════════════════════════
+
+📝 EXAMPLE COMMITS
+═══════════════════════════════════════════════════════════════
+
+git commit -m "Fix filter bug"
+git commit -m "Update styling"
+git commit -m "Add new feature"
+git commit -m "Improve performance"
+git commit -m "Fix countdown timer"
+
+═══════════════════════════════════════════════════════════════
+
+🔍 USEFUL COMMANDS
+═══════════════════════════════════════════════════════════════
+
+# Check what changed
+git status
+
+# See commit history
+git log --oneline
+
+# Undo last commit (keep changes)
+git reset --soft HEAD~1
+
+# See all files being tracked
+git ls-files
+
+═══════════════════════════════════════════════════════════════
+
+❓ COMMON QUESTIONS
+═══════════════════════════════════════════════════════════════
+
+Q: Do I need to upload node_modules?
+A: NO! It's excluded by .gitignore automatically.
+
+Q: Do I need to upload dist folder?
+A: NO! It's excluded by .gitignore. Netlify builds it.
+
+Q: How do I update my live site?
+A: Just: git add . → git commit -m "message" → git push
+   Netlify auto-deploys!
+
+Q: What if I make a mistake?
+A: Netlify Dashboard → Deploys → Click old deploy → "Publish"
+   Instant rollback!
+
+Q: How much does this cost?
+A: FREE! Netlify free tier is more than enough.
+
+═══════════════════════════════════════════════════════════════
+
+✅ VERIFICATION
+═══════════════════════════════════════════════════════════════
+
+After first push, check:
+- GitHub repository shows your files
+- node_modules NOT shown (correctly excluded)
+- dist NOT shown (correctly excluded)
+
+After Netlify deploy, check:
+- Site loads at your .netlify.app URL
+- Deaths appear with character data
+- All features work
+
+═══════════════════════════════════════════════════════════════
+
+🎯 READY TO START
+═══════════════════════════════════════════════════════════════
+
+1. Create GitHub repo at: https://github.com/new
+2. Copy the commands above (replace YOUR_USERNAME)
+3. Run in PowerShell
+4. Connect on Netlify: https://app.netlify.com/
+5. Deploy!
+
+═══════════════════════════════════════════════════════════════
+
+💡 PRO TIP: After setup, updating is just 3 commands:
+    git add .
+    git commit -m "your message"
+    git push
+
+That's it! Netlify handles everything else automatically. 🚀
+
+═══════════════════════════════════════════════════════════════
+

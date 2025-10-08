@@ -1,0 +1,616 @@
+/* Global Styles */
+:root {
+  --primary-color: #00d4ff; /* Bright blue */
+  --secondary-color: #8e2de2; /* Purple */
+  --accent-color: #00d4ff; /* Used for highlights */
+  --text-color: #e0e0e0;
+  --muted-text-color: #a0a0a0;
+  --background-color: #1a1a2e; /* Dark blue-purple */
+  --card-background: rgba(25, 25, 40, 0.8); /* Darker, slightly transparent */
+  --border-color: rgba(255, 255, 255, 0.1);
+  --success-color: #28a745;
+  --danger-color: #dc3545;
+  --gradient-blue-purple: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+  --gradient-purple-blue: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--background-color) url('/img/background.png') no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+  min-height: 100vh;
+  overflow-x: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.App {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  background: rgba(0, 0, 0, 0.85);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* Header */
+.header {
+  text-align: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 1rem;
+  transition: all 0.3s ease;
+  width: 100%;
+  max-width: 700px;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: center; /* Center content horizontally */
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+}
+
+.header-banner {
+  max-width: 120px; /* Smaller banner size */
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.header-text {
+  text-align: left; /* Align text to the left within its container */
+}
+
+.header h1 {
+  font-size: 1.8rem; /* Smaller title */
+  margin: 0;
+  background: var(--gradient-blue-purple);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+.header p {
+  font-size: 0.9rem; /* Smaller subtitle */
+  color: var(--muted-text-color);
+  margin: 0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Controls */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  justify-content: center;
+  align-items: flex-end;
+  padding: 1rem;
+  background: var(--card-background);
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  width: 100%;
+  max-width: 700px;
+}
+
+/* Info Alert */
+.info-alert {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1rem;
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 8px;
+  color: var(--primary-color);
+  font-size: 0.85rem;
+  font-weight: 500;
+  width: 100%;
+  max-width: 700px;
+  box-shadow: 0 2px 8px rgba(0, 212, 255, 0.1);
+}
+
+.info-alert i {
+  font-size: 1rem;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem; /* Smaller gap */
+}
+
+.control-label {
+  font-size: 0.8rem; /* Smaller label */
+  color: var(--muted-text-color);
+  font-weight: 500;
+}
+
+.controls select,
+.controls input {
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem; /* Reduced padding */
+  color: var(--text-color);
+  font-size: 0.85rem; /* Smaller font size */
+  outline: none;
+  transition: all 0.2s ease;
+  min-width: 120px; /* Smaller min-width */
+}
+
+.controls select:focus,
+.controls input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.2);
+}
+
+.controls select:hover,
+.controls input:hover {
+  border-color: var(--muted-text-color);
+}
+
+.checkbox-input {
+  width: auto !important;
+  min-width: auto !important;
+  height: 20px;
+  width: 20px;
+  accent-color: var(--primary-color);
+}
+
+.controls select option {
+  background: var(--background-color);
+  color: var(--text-color);
+  padding: 0.5rem;
+}
+
+.refresh-btn {
+  background: var(--gradient-blue-purple);
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem; /* Smaller font size */
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: auto;
+  box-shadow: 0 4px 10px rgba(0, 212, 255, 0.2);
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: var(--gradient-purple-blue);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(0, 212, 255, 0.3);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.refresh-btn i {
+  font-size: 0.8rem;
+}
+
+/* Deaths Grid - Free Floating Cards */
+.deaths-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 0;
+  width: 100%;
+  margin: 0 auto;
+  min-height: 200px;
+}
+
+/* Individual Death Card */
+    .death-card {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.1);
+      position: relative;
+      overflow: visible;
+      width: 100%;
+      max-width: 700px;
+      margin: 0;
+      min-height: 100px;
+      box-sizing: border-box;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+.death-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 212, 255, 0.1);
+  border-color: rgba(0, 212, 255, 0.3);
+}
+
+.death-card.new-death {
+  animation: newDeathAppear 1.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes newDeathAppear {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px);
+    background: rgba(0, 212, 255, 0.25);
+    border-color: rgba(0, 212, 255, 0.5);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(0);
+    background: rgba(0, 212, 255, 0.15);
+    border-color: rgba(0, 212, 255, 0.3);
+  }
+  100% {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+}
+
+.death-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem; /* Smaller gap */
+}
+
+    .death-player-info {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .death-skull {
+      font-size: 1.3rem;
+      margin-right: -0.2rem;
+      display: inline-block;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+    }
+
+    .copy-btn {
+      background: rgba(0, 212, 255, 0.15);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      color: var(--primary-color);
+      padding: 0.3rem 0.5rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.75rem;
+    }
+
+    .copy-btn:hover {
+      background: rgba(0, 212, 255, 0.25);
+      border-color: rgba(0, 212, 255, 0.5);
+      transform: translateY(-1px);
+    }
+
+    .copy-btn:active {
+      transform: translateY(0);
+    }
+
+    .copy-btn i {
+      font-size: 0.75rem;
+    }
+
+    .copy-btn.copied {
+      background: rgba(40, 167, 69, 0.15);
+      border-color: rgba(40, 167, 69, 0.3);
+      color: var(--success-color);
+    }
+
+    .copy-feedback {
+      font-size: 0.7rem;
+      margin-left: 0.2rem;
+      font-weight: 600;
+    }
+
+.death-info {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem; /* Smaller gap */
+}
+
+.death-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.death-player {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color 0.2s ease;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.death-player:hover {
+  color: var(--text-color);
+  text-decoration: underline;
+}
+
+.death-new {
+  font-size: 0.7rem; /* Smaller new tag */
+  color: #ff6b6b;
+  font-weight: 600;
+  background: rgba(255, 107, 107, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.death-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+    .death-badge {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-color);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .death-badge i {
+      font-size: 0.7rem;
+      vertical-align: middle; /* Fix icon alignment */
+    }
+
+    .death-badge.success {
+  background: var(--success-color);
+  color: #fff;
+}
+
+.death-badge.danger {
+  background: var(--danger-color);
+  color: #fff;
+}
+
+.death-badge i {
+  font-size: 0.7rem;
+}
+
+    .death-message {
+      font-size: 0.85rem;
+      color: var(--text-color);
+      line-height: 1.4;
+      margin-top: 0.5rem;
+      padding: 0.6rem 0.8rem;
+      background: rgba(0, 0, 0, 0.3);
+      border-left: 3px solid var(--primary-color);
+      border-radius: 6px;
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+    }
+
+.death-time {
+  font-size: 0.75rem;
+  color: var(--muted-text-color);
+  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.time-ago {
+  color: var(--primary-color);
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+/* Loading and Empty States */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  min-height: 300px;
+  text-align: center;
+  width: 100%;
+}
+
+.loading-spinner {
+  border: 4px solid rgba(0, 212, 255, 0.1);
+  border-top: 4px solid var(--primary-color);
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 1.5rem;
+}
+
+.loading-text {
+  color: var(--text-color);
+  font-size: 0.95rem;
+  font-weight: 400;
+  margin: 0;
+  opacity: 0.7;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: var(--card-background);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  min-height: 200px;
+  text-align: center;
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.empty-state h3 {
+  font-size: 1.2rem;
+  color: var(--text-color);
+  margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+  font-size: 0.9rem;
+  color: var(--muted-text-color);
+}
+
+/* Scrollbar Styling */
+.deaths-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.deaths-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+.deaths-container::-webkit-scrollbar-thumb {
+  background: var(--primary-color);
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.05);
+}
+
+.deaths-container::-webkit-scrollbar-thumb:hover {
+  background: var(--secondary-color);
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .App {
+    padding: 0.5rem;
+    gap: 0.8rem;
+  }
+
+  .header-content {
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .header h1 {
+    font-size: 1.5rem;
+  }
+
+  .header p {
+    font-size: 0.8rem;
+  }
+
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .controls select,
+  .controls input,
+  .refresh-btn {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .deaths-container {
+    padding: 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .death-card {
+    padding: 0.6rem;
+    gap: 0.5rem;
+  }
+
+  .death-content {
+    gap: 0.6rem;
+  }
+
+  .death-avatar {
+    width: 40px;
+    height: 40px;
+  }
+
+  .death-player {
+    font-size: 0.9rem;
+  }
+
+  .death-badge,
+  .death-message,
+  .death-time {
+    font-size: 0.7rem;
+  }
+}
