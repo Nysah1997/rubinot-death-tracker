@@ -429,7 +429,7 @@ app.get('/api/deaths-fast', async (req, res) => {
     fastDeathsCache = { key: fastCacheKey, deaths };
     fastDeathsTimestamp = Date.now();
     
-    const levelText = minLevel ? `level ${minLevel}+` : 'all levels';
+    const levelText = (minLevel && minLevel !== '') ? `level ${minLevel}+` : 'all levels';
     console.log(`⚡⚡ FAST fetch: ${deaths.length} deaths (${levelText}) in <1s`);
     return res.json(deaths);
     
@@ -544,7 +544,7 @@ app.get('/api/deaths', async (req, res) => {
   const cacheKey = `deaths_${worldId}_${minLevel || 'all'}_v4`;
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    const levelText = minLevel ? `level ${minLevel}+` : 'all levels';
+    const levelText = (minLevel && minLevel !== '') ? `level ${minLevel}+` : 'all levels';
     console.log(`✅ Cache hit for world ${worldId}, ${levelText} (no Rubinot request)`);
     
     // Apply client-side VIP filter if requested
