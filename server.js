@@ -17,15 +17,7 @@ const characterCache = new Map();
 const CACHE_DURATION = 3000; // 3 seconds for deaths (matches 2s frontend polling!)
 const CHARACTER_CACHE_DURATION = 86400000; // 24 hours (character data rarely changes!)
 
-// Store the very latest death separately for instant access
-let latestDeathCache = null;
-let latestDeathTimestamp = 0;
-const LATEST_DEATH_CACHE = 2000; // 2 seconds only for latest death
-
-// ULTRA-FAST: Store deaths without character data for instant response
-let fastDeathsCache = null;
-let fastDeathsTimestamp = 0;
-const FAST_DEATHS_CACHE = 2000; // 2 second cache for instant deaths
+// Removed unused fast death caches (memory optimization)
 
 // Browser instance for reuse
 let sharedBrowser = null;
@@ -200,7 +192,7 @@ async function fetchCharacterData(page, playerLink, playerName) {
 
     // Try to wait for content, but continue if it fails
     try {
-      await page.waitForSelector("div.TableContentContainer", { timeout: 5000 }); // Aggressive timeout!
+      await page.waitForSelector("div.TableContentContainer", { timeout: 3000 }); // Ultra-aggressive timeout!
     } catch (selectorError) {
       console.warn(`⚠️  ${playerName}: Slow page, skipping...`);
       // Return immediately with Unknown values
@@ -218,8 +210,12 @@ async function fetchCharacterData(page, playerLink, playerName) {
 
       const rows = table.querySelectorAll("tr");
       const data = {};
+      let foundFields = 0;
+      const requiredFields = 4; // vocation, residence, accountStatus, guild
 
-      rows.forEach((row) => {
+      // Early exit: stop when we have all fields
+      for (let i = 0; i < rows.length && foundFields < requiredFields; i++) {
+        const row = rows[i];
         const cells = row.querySelectorAll("td");
         if (cells.length >= 2) {
           const labelCell = cells[0];
@@ -230,19 +226,23 @@ async function fetchCharacterData(page, playerLink, playerName) {
             let value = valueCell.textContent?.trim() || '';
 
             if (label && value && value !== '') {
-              if (label.includes("vocation")) {
+              if (label.includes("vocation") && !data.vocation) {
                 data.vocation = value;
-              } else if (label.includes("residence")) {
+                foundFields++;
+              } else if (label.includes("residence") && !data.residence) {
                 data.residence = value;
-              } else if (label.includes("account status") || label.includes("account")) {
+                foundFields++;
+              } else if ((label.includes("account status") || label.includes("account")) && !data.accountStatus) {
                 data.accountStatus = value;
-              } else if (label.includes("guild")) {
+                foundFields++;
+              } else if (label.includes("guild") && !data.guild) {
                 data.guild = value.replace(/^Member of the\s*/i, '').replace(/^.*?\sof\s+the\s+/i, '');
+                foundFields++;
               }
             }
           }
         }
-      });
+      }
 
       return data;
     });
@@ -264,263 +264,8 @@ async function fetchCharacterData(page, playerLink, playerName) {
   }
 }
 
-// Helper function to fetch a single character (for priority fetching)
-async function fetchSingleCharacter(browser, death) {
-  const charCacheKey = `char_${death.player.toLowerCase()}`;
-  const cachedChar = characterCache.get(charCacheKey);
-  
-  // Check cache first
-  if (cachedChar && Date.now() - cachedChar.timestamp < CHARACTER_CACHE_DURATION) {
-    console.log(`✓ ${death.player} (cached)`);
-    return {
-      ...death,
-      ...cachedChar.data
-    };
-  }
-  
-  console.log(`⚡ ${death.player} (PRIORITY)`);
-  
-  // Create new page for this character
-  const charPage = await browser.newPage();
-  
-  try {
-    await charPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-    await charPage.setViewport({ width: 800, height: 400 }); // Even smaller for speed!
-    
-    // Block resources aggressively
-    await charPage.setRequestInterception(true);
-    charPage.on('request', (req) => {
-      if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) {
-        req.abort();
-      } else {
-        req.continue();
-      }
-    });
-    
-    const charData = await fetchCharacterData(charPage, death.playerLink, death.player);
-    
-    // Cache it
-    if (charData.vocation !== "Unknown" || charData.residence !== "Unknown") {
-      characterCache.set(charCacheKey, {
-        data: charData,
-        timestamp: Date.now()
-      });
-    }
-    
-    await charPage.close();
-    
-    return {
-      ...death,
-      ...charData
-    };
-  } catch (error) {
-    console.error(`❌ ${death.player}: ${error.message}`);
-    await charPage.close().catch(() => {});
-    return {
-      ...death,
-      vocation: "Unknown",
-      residence: "Unknown",
-      accountStatus: "Free Account",
-      guild: "No Guild"
-    };
-  }
-}
-
 // Apply rate limiting to all API endpoints
 app.use('/api', rateLimitMiddleware);
-
-// ULTRA-FAST: Get deaths WITHOUT character data (instant response!)
-app.get('/api/deaths-fast', async (req, res) => {
-  const worldId = req.query.world || "20";
-  const minLevel = req.query.minLevel || req.query.min_level || "";
-  
-  // Build cache key (only level filter, VIP is client-side)
-  const fastCacheKey = `${worldId}_${minLevel || 'all'}`;
-  
-  // Check fast cache
-  if (fastDeathsCache && fastDeathsCache.key === fastCacheKey && Date.now() - fastDeathsTimestamp < FAST_DEATHS_CACHE) {
-    console.log(`⚡⚡ INSTANT cache hit (${Date.now() - fastDeathsTimestamp}ms old) (no Rubinot request)`);
-    return res.json(fastDeathsCache.deaths);
-  }
-  
-  // Log non-cached request
-  if (req._rateLimitIP) {
-    logRateLimitRequest(req._rateLimitIP);
-  }
-  
-  // Fetch deaths page (no character data!)
-  try {
-    const browser = await getBrowser();
-    const page = await browser.newPage();
-    
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-    await page.setViewport({ width: 600, height: 300 }); // Tiny viewport for speed
-    
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      if (['image', 'stylesheet', 'font', 'media', 'websocket'].includes(req.resourceType())) {
-        req.abort();
-      } else {
-        req.continue();
-      }
-    });
-    
-    // Build URL with Rubinot's level filter only
-    let url = `https://rubinot.com.br/?subtopic=latestdeaths&world=${worldId}`;
-    const levelInt = parseInt(minLevel);
-    if (minLevel && !isNaN(levelInt) && levelInt > 1) {
-      url += `&min_level=${levelInt}`;
-    }
-    // NOTE: No VIP filter - Rubinot doesn't support it
-    
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
-    
-    try {
-      await page.waitForSelector("div.TableContentContainer table.TableContent", { timeout: 8000 });
-    } catch (e) {
-      // Continue
-    }
-    
-    // Parse deaths (no character data lookup!)
-    const deaths = await page.evaluate(() => {
-      const rows = document.querySelectorAll("div.TableContentContainer table.TableContent tr");
-      const arr = [];
-      let count = 0;
-      const MAX_DEATHS = 10;
-
-      for (let i = 0; i < rows.length && count < MAX_DEATHS; i++) {
-        const row = rows[i];
-        const tds = row.querySelectorAll("td");
-        if (tds.length < 3) continue;
-
-        const time = tds[1]?.innerText.trim();
-        const playerLink = tds[2]?.querySelector("a")?.href || null;
-        const player = tds[2]?.querySelector("a")?.innerText.trim() || null;
-
-        const text = tds[2]?.innerText.replace(/\s+/g, " ") || "";
-        const levelMatch = text.match(/level\s*(\d+)/i);
-        if (!levelMatch || !player) continue;
-
-        const level = parseInt(levelMatch[1]);
-        let cause = text.replace(/^.*?died at level \d+ by\s+/i, "");
-        cause = cause.replace(/\.$/, "");
-
-        arr.push({ 
-          player, 
-          playerLink, 
-          level, 
-          cause, 
-          time,
-          // Placeholders for immediate display
-          vocation: "Loading...",
-          residence: "Loading...",
-          accountStatus: "Loading...",
-          guild: "Loading..."
-        });
-        count++;
-      }
-
-      return arr;
-    });
-    
-    await page.close();
-    
-    // Cache it with filter key
-    fastDeathsCache = { key: fastCacheKey, deaths };
-    fastDeathsTimestamp = Date.now();
-    
-    const levelText = (minLevel && minLevel !== '') ? `level ${minLevel}+` : 'all levels';
-    console.log(`⚡⚡ FAST fetch: ${deaths.length} deaths (${levelText}) in <1s`);
-    return res.json(deaths);
-    
-  } catch (error) {
-    console.error("❌ Fast fetch error:", error.message);
-    return res.status(500).json({ error: error.message });
-  }
-});
-
-// NEW: Get ONLY the latest death (super fast!)
-app.get('/api/latest-death', async (req, res) => {
-  const worldId = req.query.world || "20";
-  
-  // Check if we have a recent latest death cached
-  if (latestDeathCache && Date.now() - latestDeathTimestamp < LATEST_DEATH_CACHE) {
-    console.log(`⚡ Returning cached latest death (instant!) (no Rubinot request)`);
-    return res.json(latestDeathCache);
-  }
-  
-  // Log non-cached request
-  if (req._rateLimitIP) {
-    logRateLimitRequest(req._rateLimitIP);
-  }
-  
-  // If not cached, fetch just the latest death
-  try {
-    const browser = await getBrowser();
-    const page = await browser.newPage();
-    
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-    await page.setViewport({ width: 800, height: 400 });
-    
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) {
-        req.abort();
-      } else {
-        req.continue();
-      }
-    });
-    
-    const url = `https://rubinot.com.br/?subtopic=latestdeaths&world=${worldId}`;
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-    
-    try {
-      await page.waitForSelector("div.TableContentContainer table.TableContent", { timeout: 15000 });
-    } catch (e) {
-      // Continue anyway
-    }
-    
-    // Parse ONLY the first death
-    const latestDeath = await page.evaluate(() => {
-      const rows = document.querySelectorAll("div.TableContentContainer table.TableContent tr");
-      if (rows.length < 2) return null;
-      
-      const row = rows[1]; // First data row
-      const cells = row.querySelectorAll("td");
-      if (cells.length < 2) return null;
-      
-      const playerLink = cells[0].querySelector("a");
-      const deathText = cells[1].textContent.trim();
-      
-      return {
-        player: playerLink?.textContent.trim() || "Unknown",
-        playerLink: playerLink?.href || "",
-        death: deathText,
-        timestamp: Date.now()
-      };
-    });
-    
-    await page.close();
-    
-    if (!latestDeath) {
-      return res.json({ error: "No deaths found" });
-    }
-    
-    // Fetch character data for this death
-    const deathWithData = await fetchSingleCharacter(browser, latestDeath);
-    
-    // Cache it
-    latestDeathCache = deathWithData;
-    latestDeathTimestamp = Date.now();
-    
-    console.log(`⚡ Latest death fetched: ${deathWithData.player}`);
-    return res.json(deathWithData);
-    
-  } catch (error) {
-    console.error("❌ Error fetching latest death:", error.message);
-    return res.status(500).json({ error: error.message });
-  }
-});
 
 // API endpoint - ULTRA FAST!
 app.get('/api/deaths', async (req, res) => {
@@ -550,6 +295,10 @@ app.get('/api/deaths', async (req, res) => {
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
     const levelText = (minLevel && minLevel !== '') ? `level ${minLevel}+` : 'all levels';
     console.log(`✅ Cache hit for world ${worldId}, ${levelText} (no Rubinot request)`);
+    
+    // Add browser cache headers (1 second)
+    res.set('Cache-Control', 'public, max-age=1');
+    res.set('ETag', `"${cacheKey}-${cached.timestamp}"`);
     
     // Apply client-side VIP filter if requested
     if (vipFilter) {
@@ -808,7 +557,7 @@ app.get('/api/deaths', async (req, res) => {
       
       try {
         await charPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-        await charPage.setViewport({ width: 1024, height: 600 });
+        await charPage.setViewport({ width: 800, height: 400 }); // Smaller = faster rendering
         
         // Block resources
         await charPage.setRequestInterception(true);
@@ -869,6 +618,10 @@ app.get('/api/deaths', async (req, res) => {
       timestamp: Date.now()
     });
 
+    // Add browser cache headers (1 second)
+    res.set('Cache-Control', 'public, max-age=1');
+    res.set('ETag', `"${cacheKey}-${Date.now()}"`);
+    
     // Apply client-side VIP filter if requested
     if (vipFilter) {
       const vipDeaths = deathsWithCharacterData.filter(death => 
