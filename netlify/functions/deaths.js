@@ -1,12 +1,9 @@
-// Simple fetch-based scraper - works reliably on Netlify
-// No Puppeteer needed!
-
+// Netlify function with better headers to bypass bot detection
 const cache = new Map();
 const characterCache = new Map();
 const CACHE_DURATION = 2000;
 const CHARACTER_CACHE_DURATION = 3600000;
 
-// Cleanup
 setInterval(() => {
   const now = Date.now();
   for (const [key, value] of cache.entries()) {
@@ -116,11 +113,25 @@ export async function handler(event) {
   }
 
   try {
+    // Better headers to look more like a real browser
     const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Cache-Control': 'max-age=0'
+      }
     });
     
-    if (!response.ok) throw new Error(`Failed to fetch deaths: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch deaths: ${response.status}`);
+    }
     
     const html = await response.text();
     const deaths = parseDeathsTable(html);
@@ -139,7 +150,13 @@ export async function handler(event) {
       
       try {
         const charResponse = await fetch(death.playerLink, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Referer': 'https://rubinot.com.br/',
+            'Connection': 'keep-alive'
+          }
         });
         
         if (!charResponse.ok) throw new Error(`Failed to fetch character: ${charResponse.status}`);
@@ -150,7 +167,7 @@ export async function handler(event) {
         characterCache.set(charCacheKey, { data: charData, timestamp: Date.now() });
         deathsWithCharacterData.push({ ...death, ...charData });
         
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 200));
       } catch (error) {
         console.error(`Error fetching ${death.player}:`, error.message);
         deathsWithCharacterData.push({
