@@ -388,7 +388,13 @@ async function fetchCharacterData(playerName) {
           } else if (label?.includes("account")) {
             accountStatus = value || "Unknown";
           } else if (label?.includes("guild")) {
-            guild = value || "None";
+            // Extract guild name only (remove "Member of the " or "Rank of ")
+            if (value) {
+              const guildMatch = value.match(/(?:Member of the|of the)\s+(.+)/i);
+              guild = guildMatch ? guildMatch[1].trim() : value;
+            } else {
+              guild = "None";
+            }
           }
         }
       }
