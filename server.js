@@ -1,9 +1,13 @@
 // ULTRA-FAST Express server for Railway
 // Optimized with: browser reuse, parallel fetching, pre-warming, longer cache
 import express from 'express';
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+// Use stealth plugin to bypass Cloudflare bot detection
+puppeteer.use(StealthPlugin());
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -138,14 +142,39 @@ async function fetchDeathsFromRubinOT(worldId, minLevel, vipFilter) {
       try {
         page = await browser.newPage();
         
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-        await page.setViewport({ width: 1024, height: 600 }); // Smaller viewport
+        // Stealth: Set realistic user agent and viewport
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        await page.setViewport({ width: 1920, height: 1080 }); // Realistic viewport
         
-        // Block resources
+        // Stealth: Set additional headers
+        await page.setExtraHTTPHeaders({
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+        });
+        
+        // Stealth: Override navigator properties
+        await page.evaluateOnNewDocument(() => {
+          // Override the navigator.webdriver property
+          Object.defineProperty(navigator, 'webdriver', {
+            get: () => false,
+          });
+          
+          // Override the navigator.plugins to look like a real browser
+          Object.defineProperty(navigator, 'plugins', {
+            get: () => [1, 2, 3, 4, 5],
+          });
+          
+          // Override navigator.languages
+          Object.defineProperty(navigator, 'languages', {
+            get: () => ['en-US', 'en'],
+          });
+        });
+        
+        // Block resources (but keep HTML/scripts for Cloudflare)
         await page.setRequestInterception(true);
         page.on('request', (req) => {
           const resourceType = req.resourceType();
-          if (['image', 'stylesheet', 'font', 'media', 'websocket'].includes(resourceType)) {
+          if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
             req.abort();
           } else {
             req.continue();
@@ -340,7 +369,7 @@ async function getBrowser() {
   browserLaunching = true;
   
   try {
-    console.log('🚀 Launching browser...');
+    console.log('🚀 Launching browser with stealth mode...');
     sharedBrowser = await puppeteer.launch({
       headless: true,
       args: [
@@ -350,7 +379,9 @@ async function getBrowser() {
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-blink-features=AutomationControlled', // Hide automation
+        '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       ]
     });
     
