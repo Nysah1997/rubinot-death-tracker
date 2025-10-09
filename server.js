@@ -254,7 +254,7 @@ async function fetchDeathsFromRubinOT(worldId, minLevel, vipFilter) {
           vocation: "Unknown",
           residence: "Loading...",
           accountStatus: "Loading...",
-          guild: "Loading..."
+          guild: "" // Empty until fetched (won't show if no guild)
         });
         count++;
       }
@@ -373,7 +373,7 @@ async function fetchCharacterData(playerName) {
       let vocation = "Unknown";
       let residence = "Unknown";
       let accountStatus = "Unknown";
-      let guild = "None";
+      let guild = ""; // Empty string means no guild (won't display label)
       
       for (const row of rows) {
         const cells = row.querySelectorAll("td");
@@ -389,11 +389,11 @@ async function fetchCharacterData(playerName) {
             accountStatus = value || "Unknown";
           } else if (label?.includes("guild")) {
             // Extract guild name only (remove "Member of the " or "Rank of ")
-            if (value) {
+            if (value && !value.toLowerCase().includes("no guild")) {
               const guildMatch = value.match(/(?:Member of the|of the)\s+(.+)/i);
               guild = guildMatch ? guildMatch[1].trim() : value;
             } else {
-              guild = "None";
+              guild = ""; // Empty string means no guild (won't display label)
             }
           }
         }
@@ -494,7 +494,7 @@ app.get('/api/deaths', async (req, res) => {
           death.vocation = charData.vocation || "Unknown";
           death.residence = charData.residence || "Unknown";
           death.accountStatus = charData.accountStatus || "Unknown";
-          death.guild = charData.guild || "None";
+          death.guild = charData.guild || ""; // Empty if no guild
         }
       });
     }
@@ -507,7 +507,7 @@ app.get('/api/deaths', async (req, res) => {
         death.vocation = cachedChar.data.vocation || "Unknown";
         death.residence = cachedChar.data.residence || "Unknown";
         death.accountStatus = cachedChar.data.accountStatus || "Unknown";
-        death.guild = cachedChar.data.guild || "None";
+        death.guild = cachedChar.data.guild || ""; // Empty if no guild
       }
     });
     
