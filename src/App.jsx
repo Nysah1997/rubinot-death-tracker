@@ -231,10 +231,10 @@ function App() {
     // Initial fetch
     fetchDeaths();
     
-    // Set up auto-refresh every 2 seconds (fast but safe)
+    // Set up auto-refresh every 1.5 seconds (ultra-fast!)
     const interval = setInterval(() => {
       fetchDeaths();
-    }, 2000);
+    }, 1500);
 
     return () => {
       console.log('Cleaning up interval for world:', appliedWorld);
@@ -262,7 +262,7 @@ function App() {
     // Hide feedback after a short delay (gives time for data to load)
     setTimeout(() => {
       setIsApplyingFilters(false);
-    }, 1500);
+    }, 800); // Faster feedback!
   };
   
   // Check if filters have changed (show visual indicator)

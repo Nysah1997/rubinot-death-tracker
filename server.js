@@ -15,10 +15,10 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// MAXIMUM SPEED caching - faster and still safe!
+// ULTRA-FAST caching - minimum delay for real-time updates!
 const cache = new Map();
 const characterCache = new Map();
-const CACHE_DURATION = 3000; // 3 seconds (faster updates, still safe!)
+const CACHE_DURATION = 1500; // 1.5 seconds (ultra-fast updates!)
 const CHARACTER_CACHE_DURATION = 86400000; // 24 hours (character data rarely changes!)
 
 // Browser instance for reuse
@@ -28,8 +28,8 @@ let browserLaunching = false;
 // ULTRA-SMART Rate limiting - ONLY protects RubinOT, not cache hits!
 const rubinOTRequestLog = new Map(); // Track ONLY actual RubinOT fetches per IP
 const RATE_LIMIT_WINDOW = 60000; // 1 minute window
-const MAX_RUBINOT_FETCHES_PER_MINUTE = 30; // Max 30 actual RubinOT fetches per minute (supports 4+ concurrent users)
-const MIN_RUBINOT_INTERVAL = 2000; // Minimum 2 seconds between RubinOT fetches (faster for multiple users)
+const MAX_RUBINOT_FETCHES_PER_MINUTE = 40; // Max 40 actual RubinOT fetches per minute (ultra-fast!)
+const MIN_RUBINOT_INTERVAL = 1500; // Minimum 1.5 seconds between RubinOT fetches (ultra-fast!)
 
 // REQUEST QUEUE for multiple users - prevents overwhelming RubinOT
 const requestQueue = [];
@@ -104,8 +104,8 @@ async function processRequestQueue() {
       const result = await fetchDeathsFromRubinOT(worldId, minLevel, vipFilter);
       resolve(result);
       
-      // Small delay between requests to be nice to RubinOT
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Minimal delay between requests (ultra-fast!)
+      await new Promise(resolve => setTimeout(resolve, 200));
       
     } catch (error) {
       reject(error);
@@ -181,17 +181,17 @@ async function fetchDeathsFromRubinOT(worldId, minLevel, vipFilter) {
           }
         });
         
-        // PROGRESSIVE TIMEOUTS: Start fast, get more patient
+        // PROGRESSIVE TIMEOUTS: Start fast, get more patient (optimized for speed)
         let gotoTimeout, selectorTimeout;
         if (retryCount === 0) {
-          gotoTimeout = 8000;    // 8s - fast bailout
-          selectorTimeout = 4000; // 4s - quick check
+          gotoTimeout = 6000;    // 6s - ultra-fast bailout
+          selectorTimeout = 3000; // 3s - quick check
         } else if (retryCount === 1) {
-          gotoTimeout = 12000;   // 12s - medium patience
-          selectorTimeout = 6000; // 6s - medium check
+          gotoTimeout = 10000;   // 10s - medium patience
+          selectorTimeout = 5000; // 5s - medium check
         } else {
-          gotoTimeout = 20000;   // 20s - last chance, be patient
-          selectorTimeout = 8000; // 8s - thorough check
+          gotoTimeout = 15000;   // 15s - last chance
+          selectorTimeout = 7000; // 7s - thorough check
         }
         
         const startTime = Date.now();
@@ -204,8 +204,8 @@ async function fetchDeathsFromRubinOT(worldId, minLevel, vipFilter) {
         const loadTime = Date.now() - startTime;
         console.log(`⏱️  Page loaded in ${loadTime}ms (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
 
-        // Give extra time for dynamic content
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Give minimal time for dynamic content (ultra-fast!)
+        await new Promise(resolve => setTimeout(resolve, 300));
 
         // Try to wait for table with progressive timeout
         try {
