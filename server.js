@@ -345,7 +345,7 @@ async function fetchCharacterData(playerName) {
       }
     });
     
-    const url = `https://rubinot.com/character/${encodeURIComponent(playerName)}`;
+    const url = `https://rubinot.com.br/?subtopic=characters&name=${encodeURIComponent(playerName)}`;
     
     await page.goto(url, { 
       waitUntil: "domcontentloaded",
@@ -379,7 +379,7 @@ async function fetchCharacterData(playerName) {
         }
       }
       
-      return { residence, accountStatus, guild };
+      return { player: playerName, residence, accountStatus, guild };
     });
     
     await page.close();
@@ -457,7 +457,10 @@ app.get('/api/deaths', async (req, res) => {
     const deaths = await queueRubinOTRequest(worldId, minLevel, vipFilter);
     
     // Process character data for uncached deaths
-    const uncachedDeaths = deaths.filter(d => !characterCache.has(d.player));
+    const uncachedDeaths = deaths.filter(d => {
+      const cacheKey = `char_${d.player.toLowerCase()}`;
+      return !characterCache.has(cacheKey);
+    });
     console.log(`🔍 Fetching character data for ${uncachedDeaths.length} uncached deaths...`);
     
     if (uncachedDeaths.length > 0) {
@@ -477,7 +480,8 @@ app.get('/api/deaths', async (req, res) => {
     
     // Fill cached character data
     deaths.forEach(death => {
-      const cachedChar = characterCache.get(death.player);
+      const cacheKey = `char_${death.player.toLowerCase()}`;
+      const cachedChar = characterCache.get(cacheKey);
       if (cachedChar) {
         death.residence = cachedChar.data.residence || "Unknown";
         death.accountStatus = cachedChar.data.accountStatus || "Unknown";
