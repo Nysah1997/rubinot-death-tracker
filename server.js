@@ -207,6 +207,32 @@ async function fetchDeathsFromRubinOT(worldId, minLevel, vipFilter) {
         // Give minimal time for dynamic content (ultra-fast!)
         await new Promise(resolve => setTimeout(resolve, 300));
 
+        // Check for Cloudflare challenge first
+        const isCloudflareChallenge = await page.evaluate(() => {
+          return document.body.innerHTML.includes('cf-wrapper') || 
+                 document.body.innerHTML.includes('Checking your browser') ||
+                 document.body.innerHTML.includes('cf-error-details');
+        });
+        
+        if (isCloudflareChallenge) {
+          console.log(`🛡️  Cloudflare challenge detected, waiting for completion...`);
+          // Wait longer for Cloudflare challenge to complete
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+          // Check again if challenge passed
+          const stillBlocked = await page.evaluate(() => {
+            return document.body.innerHTML.includes('cf-wrapper') || 
+                   document.body.innerHTML.includes('Sorry, you have been blocked');
+          });
+          
+          if (stillBlocked) {
+            console.log(`❌ Cloudflare challenge failed, forcing retry...`);
+            throw new Error('Cloudflare challenge failed');
+          }
+          
+          console.log(`✅ Cloudflare challenge passed!`);
+        }
+        
         // Try to wait for table with progressive timeout
         try {
           await page.waitForSelector("div.TableContentContainer table.TableContent", { timeout: selectorTimeout });
@@ -219,19 +245,27 @@ async function fetchDeathsFromRubinOT(worldId, minLevel, vipFilter) {
             const table = document.querySelector("table.TableContent");
             const anyTable = document.querySelector("table");
             const bodyHTML = document.body ? document.body.innerHTML.substring(0, 500) : "NO BODY";
+            const isCfBlock = document.body.innerHTML.includes('cf-wrapper');
             
             return { 
               container: !!container, 
               table: !!table,
               anyTable: !!anyTable,
               bodyPreview: bodyHTML,
-              containerHTML: container ? container.innerHTML.substring(0, 300) : "NO CONTAINER"
+              containerHTML: container ? container.innerHTML.substring(0, 300) : "NO CONTAINER",
+              cloudflareBlock: isCfBlock
             };
           });
           
-          console.log(`🔍 Page content check: container=${pageInfo.container}, table=${pageInfo.table}, anyTable=${pageInfo.anyTable}`);
-          console.log(`📄 Body preview:`, pageInfo.bodyPreview);
-          console.log(`📦 Container HTML:`, pageInfo.containerHTML);
+          console.log(`🔍 Page content check: container=${pageInfo.container}, table=${pageInfo.table}, anyTable=${pageInfo.anyTable}, cfBlock=${pageInfo.cloudflareBlock}`);
+          
+          // If Cloudflare is blocking, don't show HTML preview (too verbose)
+          if (!pageInfo.cloudflareBlock) {
+            console.log(`📄 Body preview:`, pageInfo.bodyPreview);
+            console.log(`📦 Container HTML:`, pageInfo.containerHTML);
+          } else {
+            console.log(`🛡️  Cloudflare blocking detected - will retry with fresh page`);
+          }
           
           if (pageInfo.container || pageInfo.anyTable) {
             // Some content exists, try to continue
@@ -251,13 +285,29 @@ async function fetchDeathsFromRubinOT(worldId, minLevel, vipFilter) {
           page = null;
         }
         
+        // If Cloudflare is consistently blocking, restart browser on retry 2
+        if (error.message.includes('Cloudflare') && retryCount === 1) {
+          console.log(`🔄 Cloudflare blocking persists, restarting browser with new fingerprint...`);
+          try {
+            if (sharedBrowser) {
+              await sharedBrowser.close();
+              sharedBrowser = null;
+            }
+            // Next getBrowser() call will create a fresh browser
+          } catch (e) {
+            console.warn('⚠️  Error closing browser:', e.message);
+          }
+        }
+        
         retryCount++;
         if (retryCount > MAX_RETRIES) {
           throw new Error(`Failed to load RubinOT page after ${MAX_RETRIES + 1} attempts: ${error.message}`);
         }
         
-        // Wait before retry
-        const waitTime = Math.min(1000 * retryCount, 3000);
+        // Wait before retry (longer if Cloudflare blocked)
+        const waitTime = error.message.includes('Cloudflare') 
+          ? Math.min(2000 * retryCount, 5000) // Longer wait for Cloudflare
+          : Math.min(1000 * retryCount, 3000); // Normal wait
         console.log(`⏳ Waiting ${waitTime}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
@@ -371,7 +421,7 @@ async function getBrowser() {
   try {
     console.log('🚀 Launching browser with stealth mode...');
     sharedBrowser = await puppeteer.launch({
-      headless: true,
+      headless: 'new', // Use new headless mode (better Cloudflare evasion)
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -381,6 +431,7 @@ async function getBrowser() {
         '--no-zygote',
         '--disable-gpu',
         '--disable-blink-features=AutomationControlled', // Hide automation
+        '--disable-features=IsolateOrigins,site-per-process', // Better compatibility
         '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       ]
     });
