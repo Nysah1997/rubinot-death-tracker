@@ -244,7 +244,18 @@ async function fetchDeathsFromRubinOT(worldId, minLevel, vipFilter) {
         let cause = text.replace(/^.*?died at level \d+ by\s+/i, "");
         cause = cause.replace(/\.$/, "");
 
-        arr.push({ player, playerLink, level, cause, time });
+        arr.push({ 
+          player, 
+          playerLink, 
+          level, 
+          cause, 
+          time,
+          // Placeholder values - will be filled by character data fetch
+          vocation: "Unknown",
+          residence: "Loading...",
+          accountStatus: "Loading...",
+          guild: "Loading..."
+        });
         count++;
       }
 
@@ -354,11 +365,12 @@ async function fetchCharacterData(playerName) {
     
     await page.waitForSelector("div.TableContentContainer", { timeout: 3000 });
     
-    const characterData = await page.evaluate(() => {
+    const characterData = await page.evaluate((pName) => {
       const container = document.querySelector("div.TableContentContainer");
       if (!container) return null;
       
       const rows = container.querySelectorAll("tr");
+      let vocation = "Unknown";
       let residence = "Unknown";
       let accountStatus = "Unknown";
       let guild = "None";
@@ -369,7 +381,9 @@ async function fetchCharacterData(playerName) {
           const label = cells[0]?.textContent?.trim().toLowerCase();
           const value = cells[1]?.textContent?.trim();
           
-          if (label?.includes("residence")) {
+          if (label?.includes("vocation")) {
+            vocation = value || "Unknown";
+          } else if (label?.includes("residence")) {
             residence = value || "Unknown";
           } else if (label?.includes("account")) {
             accountStatus = value || "Unknown";
@@ -379,8 +393,8 @@ async function fetchCharacterData(playerName) {
         }
       }
       
-      return { player: playerName, residence, accountStatus, guild };
-    });
+      return { player: pName, vocation, residence, accountStatus, guild };
+    }, playerName);
     
     await page.close();
     
@@ -471,6 +485,7 @@ app.get('/api/deaths', async (req, res) => {
       deaths.forEach(death => {
         const charData = characterData.find(c => c && c.player === death.player);
         if (charData) {
+          death.vocation = charData.vocation || "Unknown";
           death.residence = charData.residence || "Unknown";
           death.accountStatus = charData.accountStatus || "Unknown";
           death.guild = charData.guild || "None";
@@ -483,6 +498,7 @@ app.get('/api/deaths', async (req, res) => {
       const cacheKey = `char_${death.player.toLowerCase()}`;
       const cachedChar = characterCache.get(cacheKey);
       if (cachedChar) {
+        death.vocation = cachedChar.data.vocation || "Unknown";
         death.residence = cachedChar.data.residence || "Unknown";
         death.accountStatus = cachedChar.data.accountStatus || "Unknown";
         death.guild = cachedChar.data.guild || "None";
