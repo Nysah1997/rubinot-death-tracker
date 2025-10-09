@@ -168,12 +168,15 @@ async function fetchDeathsFromRubinOT(worldId, minLevel, vipFilter) {
         const startTime = Date.now();
         
         await page.goto(url, { 
-          waitUntil: "domcontentloaded",
+          waitUntil: "networkidle2", // Wait for network to be mostly idle
           timeout: gotoTimeout
         });
 
         const loadTime = Date.now() - startTime;
         console.log(`⏱️  Page loaded in ${loadTime}ms (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+
+        // Give extra time for dynamic content
+        await page.waitForTimeout(500);
 
         // Try to wait for table with progressive timeout
         try {
@@ -181,18 +184,29 @@ async function fetchDeathsFromRubinOT(worldId, minLevel, vipFilter) {
           console.log(`✅ Table found!`);
           break; // Success! Exit retry loop
         } catch (selectorError) {
-          // Check if page has any content at all
-          const hasContent = await page.evaluate(() => {
+          // Check if page has any content at all and debug structure
+          const pageInfo = await page.evaluate(() => {
             const container = document.querySelector("div.TableContentContainer");
             const table = document.querySelector("table.TableContent");
-            return { container: !!container, table: !!table };
+            const anyTable = document.querySelector("table");
+            const bodyHTML = document.body ? document.body.innerHTML.substring(0, 500) : "NO BODY";
+            
+            return { 
+              container: !!container, 
+              table: !!table,
+              anyTable: !!anyTable,
+              bodyPreview: bodyHTML,
+              containerHTML: container ? container.innerHTML.substring(0, 300) : "NO CONTAINER"
+            };
           });
           
-          console.log(`🔍 Page content check: container=${hasContent.container}, table=${hasContent.table}`);
+          console.log(`🔍 Page content check: container=${pageInfo.container}, table=${pageInfo.table}, anyTable=${pageInfo.anyTable}`);
+          console.log(`📄 Body preview:`, pageInfo.bodyPreview);
+          console.log(`📦 Container HTML:`, pageInfo.containerHTML);
           
-          if (hasContent.container) {
-            // Container exists, table might be loading slowly
-            console.log(`⚠️  Container exists but table slow, continuing...`);
+          if (pageInfo.container || pageInfo.anyTable) {
+            // Some content exists, try to continue
+            console.log(`⚠️  Some content exists, continuing to parse...`);
             break; // Exit retry loop, try to parse anyway
           }
           
@@ -220,9 +234,30 @@ async function fetchDeathsFromRubinOT(worldId, minLevel, vipFilter) {
       }
     }
 
-    // Parse deaths from the page (correct RubinOT structure)
+    // Parse deaths from the page (flexible selector approach)
     const deaths = await page.evaluate(() => {
-      const rows = document.querySelectorAll("div.TableContentContainer table.TableContent tr");
+      // Try multiple selector strategies
+      let rows = document.querySelectorAll("div.TableContentContainer table.TableContent tr");
+      
+      // Fallback 1: Try without div wrapper
+      if (rows.length === 0) {
+        rows = document.querySelectorAll("table.TableContent tr");
+      }
+      
+      // Fallback 2: Try any table rows
+      if (rows.length === 0) {
+        const tables = document.querySelectorAll("table");
+        for (const table of tables) {
+          const testRows = table.querySelectorAll("tr");
+          if (testRows.length > 0) {
+            rows = testRows;
+            break;
+          }
+        }
+      }
+      
+      console.log(`Found ${rows.length} table rows`);
+      
       const arr = [];
       let count = 0;
       const MAX_DEATHS = 3; // Only 3 for maximum speed!
