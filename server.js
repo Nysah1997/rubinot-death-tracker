@@ -176,7 +176,7 @@ async function fetchDeathsFromRubinOT(worldId, minLevel, vipFilter) {
         console.log(`⏱️  Page loaded in ${loadTime}ms (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
 
         // Give extra time for dynamic content
-        await page.waitForTimeout(500);
+        await new Promise(resolve => setTimeout(resolve, 500));
 
         // Try to wait for table with progressive timeout
         try {
