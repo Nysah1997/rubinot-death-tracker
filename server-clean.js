@@ -122,7 +122,7 @@ function queueRubinOTRequest(worldId, minLevel, vipFilter) {
 
 // EXTRACTED: RubinOT fetching logic (used by queue processor)
 async function fetchDeathsFromRubinOT(worldId, minLevel, vipFilter) {
-  const url = `https://rubinot.com.br/?subtopic=latestdeaths&world=${worldId}${minLevel ? `&min_level=${minLevel}` : ''}`;
+  const url = `https://rubinot.com/deaths?world=${worldId}${minLevel ? `&min_level=${minLevel}` : ''}`;
   let page = null;
   let retryCount = 0;
   const MAX_RETRIES = 3;
@@ -220,35 +220,39 @@ async function fetchDeathsFromRubinOT(worldId, minLevel, vipFilter) {
       }
     }
 
-    // Parse deaths from the page (correct RubinOT structure)
+    // Parse deaths from the page
     const deaths = await page.evaluate(() => {
-      const rows = document.querySelectorAll("div.TableContentContainer table.TableContent tr");
-      const arr = [];
-      let count = 0;
-      const MAX_DEATHS = 3; // Only 3 for maximum speed!
-
-      for (let i = 0; i < rows.length && count < MAX_DEATHS; i++) {
+      const rows = document.querySelectorAll("div.TableContentContainer table.TableContent tbody tr");
+      const deaths = [];
+      
+      for (let i = 0; i < Math.min(rows.length, 3); i++) { // Only parse 3 deaths for speed
         const row = rows[i];
-        const tds = row.querySelectorAll("td");
-        if (tds.length < 3) continue;
-
-        const time = tds[1]?.innerText.trim();
-        const playerLink = tds[2]?.querySelector("a")?.href || null;
-        const player = tds[2]?.querySelector("a")?.innerText.trim() || null;
-
-        const text = tds[2]?.innerText.replace(/\s+/g, " ") || "";
-        const levelMatch = text.match(/level\s*(\d+)/i);
-        if (!levelMatch || !player) continue;
-
-        const level = parseInt(levelMatch[1]);
-        let cause = text.replace(/^.*?died at level \d+ by\s+/i, "");
-        cause = cause.replace(/\.$/, "");
-
-        arr.push({ player, playerLink, level, cause, time });
-        count++;
+        const cells = row.querySelectorAll("td");
+        
+        if (cells.length >= 6) {
+          const player = cells[0]?.textContent?.trim() || "Unknown";
+          const level = parseInt(cells[1]?.textContent?.trim()) || 0;
+          const vocation = cells[2]?.textContent?.trim() || "Unknown";
+          const time = cells[3]?.textContent?.trim() || "Unknown";
+          const reason = cells[4]?.textContent?.trim() || "Unknown";
+          const killer = cells[5]?.textContent?.trim() || "Unknown";
+          
+          deaths.push({
+            player,
+            level,
+            vocation,
+            time,
+            reason,
+            killer,
+            // Placeholder values - will be filled by character data fetch
+            residence: "Loading...",
+            accountStatus: "Loading...",
+            guild: "Loading..."
+          });
+        }
       }
-
-      return arr;
+      
+      return deaths;
     });
 
     await page.close();
