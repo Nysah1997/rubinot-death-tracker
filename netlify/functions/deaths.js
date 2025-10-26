@@ -1,8 +1,16 @@
 // Netlify function with better headers to bypass bot detection
+import fetch from "node-fetch";
+
 const cache = new Map();
 const characterCache = new Map();
 const CACHE_DURATION = 2000;
 const CHARACTER_CACHE_DURATION = 3600000;
+
+// Set para no enviar alertas duplicadas
+const notifiedDeaths = new Set();
+
+// Webhook de Discord
+const DISCORD_WEBHOOK_URL = "TU_WEBHOOK_DE_DISCORD_AQUI";
 
 setInterval(() => {
   const now = Date.now();
@@ -18,45 +26,61 @@ setInterval(() => {
   }
 }, 10000);
 
+async function sendDiscordAlert(death) {
+  const message = {
+    content: `💀 **${death.player}** (nivel ${death.level}) murió en **${death.time}** en ${death.vocation}, ${death.residence}. Causa: ${death.cause}. Cuenta: ${death.accountStatus}. Guild: ${death.guild}`,
+  };
+
+  try {
+    await fetch(DISCORD_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(message),
+    });
+  } catch (err) {
+    console.error("Error enviando alerta a Discord:", err.message);
+  }
+}
+
 function parseDeathsTable(html) {
   const deaths = [];
   const tableMatch = html.match(/<table[^>]*class="TableContent"[^>]*>([\s\S]*?)<\/table>/i);
   if (!tableMatch) return deaths;
-  
+
   const tableContent = tableMatch[1];
   const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   let rowMatch;
-  
+
   while ((rowMatch = rowRegex.exec(tableContent)) !== null) {
     const rowHtml = rowMatch[1];
     const cells = [];
     const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
     let cellMatch;
-    
+
     while ((cellMatch = cellRegex.exec(rowHtml)) !== null) {
       cells.push(cellMatch[1]);
     }
-    
+
     if (cells.length >= 3) {
       const time = cells[1].replace(/<[^>]*>/g, '').trim();
       const playerLinkMatch = cells[2].match(/<a[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/i);
       if (!playerLinkMatch) continue;
-      
+
       const playerLink = 'https://rubinot.com.br/' + playerLinkMatch[1].replace(/^\.\/\?/, '?');
       const player = playerLinkMatch[2].trim();
-      
+
       const fullText = cells[2].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
       const levelMatch = fullText.match(/level\s+(\d+)/i);
       if (!levelMatch) continue;
-      
+
       const level = parseInt(levelMatch[1]);
       const causeMatch = fullText.match(/level\s+\d+\s+by\s+(.+?)\.?\s*$/i);
       const cause = causeMatch ? causeMatch[1].trim() : 'unknown';
-      
+
       deaths.push({ player, playerLink, level, cause, time });
     }
   }
-  
+
   return deaths;
 }
 
@@ -67,19 +91,19 @@ function parseCharacterData(html) {
     accountStatus: 'Free Account',
     guild: 'No Guild'
   };
-  
+
   const vocationMatch = html.match(/<b>Vocation:<\/b><\/td>\s*<td>([^<]+)/i);
   if (vocationMatch) data.vocation = vocationMatch[1].trim();
-  
+
   const residenceMatch = html.match(/<b>Residence:<\/b><\/td>\s*<td>([^<]+)/i);
   if (residenceMatch) data.residence = residenceMatch[1].trim();
-  
+
   const accountMatch = html.match(/<b>Account\s+status:<\/b><\/td>\s*<td>[\s\S]*?<b>([^<]+)<\/b>/i);
   if (accountMatch) data.accountStatus = accountMatch[1].trim();
-  
+
   const guildMatch = html.match(/<b>Guild:<\/b><\/td>\s*<td>Member of the <a[^>]*>([^<]+)<\/a>/i);
   if (guildMatch) data.guild = guildMatch[1].trim();
-  
+
   return data;
 }
 
@@ -113,7 +137,6 @@ export async function handler(event) {
   }
 
   try {
-    // Better headers to look more like a real browser
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -128,11 +151,9 @@ export async function handler(event) {
         'Cache-Control': 'max-age=0'
       }
     });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch deaths: ${response.status}`);
-    }
-    
+
+    if (!response.ok) throw new Error(`Failed to fetch deaths: ${response.status}`);
+
     const html = await response.text();
     const deaths = parseDeathsTable(html);
 
@@ -142,12 +163,12 @@ export async function handler(event) {
     for (const death of latestDeaths) {
       const charCacheKey = `char_${death.player.toLowerCase()}`;
       const cachedChar = characterCache.get(charCacheKey);
-      
+
       if (cachedChar && Date.now() - cachedChar.timestamp < CHARACTER_CACHE_DURATION) {
         deathsWithCharacterData.push({ ...death, ...cachedChar.data });
         continue;
       }
-      
+
       try {
         const charResponse = await fetch(death.playerLink, {
           headers: {
@@ -158,15 +179,15 @@ export async function handler(event) {
             'Connection': 'keep-alive'
           }
         });
-        
+
         if (!charResponse.ok) throw new Error(`Failed to fetch character: ${charResponse.status}`);
-        
+
         const charHtml = await charResponse.text();
         const charData = parseCharacterData(charHtml);
-        
+
         characterCache.set(charCacheKey, { data: charData, timestamp: Date.now() });
         deathsWithCharacterData.push({ ...death, ...charData });
-        
+
         await new Promise(resolve => setTimeout(resolve, 200));
       } catch (error) {
         console.error(`Error fetching ${death.player}:`, error.message);
@@ -180,6 +201,15 @@ export async function handler(event) {
       }
     }
 
+    // Enviar alertas a Discord
+    for (const death of deathsWithCharacterData) {
+      const deathId = `${death.player}_${death.time}`;
+      if (!notifiedDeaths.has(deathId) && (death.level >= 100 || death.accountStatus.includes("Premium"))) {
+        await sendDiscordAlert(death);
+        notifiedDeaths.add(deathId);
+      }
+    }
+
     cache.set(cacheKey, { data: deathsWithCharacterData, timestamp: Date.now() });
 
     return {
@@ -190,7 +220,7 @@ export async function handler(event) {
       },
       body: JSON.stringify(deathsWithCharacterData)
     };
-    
+
   } catch (err) {
     console.error("Error:", err);
     return {
