@@ -10,7 +10,7 @@ const CHARACTER_CACHE_DURATION = 3600000;
 const notifiedDeaths = new Set();
 
 // Webhook de Discord
-const DISCORD_WEBHOOK_URL = "TU_WEBHOOK_DE_DISCORD_AQUI";
+const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1428348059632271520/XxfV0kvP-VuX-gNTkWkaxRejMpJuPoghFP23nb9qYS48UAA4FNF8fVaR7sjJ2eGMlSma";
 
 setInterval(() => {
   const now = Date.now();
